@@ -2,7 +2,7 @@ venv/
 *.db
 *.pyc
 
-APIs/*.txt
+.env
 
 images/*.jpg
 images/*.png

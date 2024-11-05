@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 
 
 # Function to read text from a file
@@ -14,16 +15,12 @@ def get_text_from_file(file_path):
 
 
 # ----------------
-
-API_PATH = "APIs"
-
+# Load environment variables from .env file
+load_dotenv()
 # Bot token
-BOT_TOKEN_PATH = os.path.join(API_PATH, "bot_token.txt")
-BOT_TOKEN = get_text_from_file(BOT_TOKEN_PATH)
-
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 # OpenAI key
-OPENAI_API_PATH = os.path.join(API_PATH, "openai.txt")
-OPENAI_API_KEY = get_text_from_file(OPENAI_API_PATH)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # ----------------
 # Main files directory
