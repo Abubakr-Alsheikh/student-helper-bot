@@ -27,9 +27,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MAIN_FILES = "Main Files"
 
 # Path to the folder containing welcoming materials
-WELCOMING_FOLDER = "welcoming"
+WELCOMING_FOLDER = os.path.join(MAIN_FILES, "Welcoming")
 
-IMAGE_FOLDER = "Images"
+IMAGE_FOLDER = os.path.join(MAIN_FILES, "Images")
 
 # Path to Database File
 DATABASE_FILE = os.path.join(MAIN_FILES, "database.db")
