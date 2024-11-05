@@ -37,7 +37,6 @@ from utils.user_management import (
     update_user_points,
     update_user_usage_time,
 )
-import pythoncom
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -54,7 +53,7 @@ CHATTING = 0
 
 
 executor = ThreadPoolExecutor(
-    max_workers=2, initializer=pythoncom.CoInitialize
+    max_workers=2
 )
 
 
