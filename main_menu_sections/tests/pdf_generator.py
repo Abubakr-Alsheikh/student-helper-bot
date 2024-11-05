@@ -6,7 +6,6 @@ from datetime import datetime
 
 from config import Q_AND_A_FILE_PATH
 from utils import database
-import pypandoc
 logger = logging.getLogger(__name__)
 
 
@@ -94,14 +93,6 @@ def convert_to_pdf(word_file, pdf_file):
     """Converts the Word document to PDF."""
     try:
         convert(word_file, pdf_file)
-    except Exception as e:
-        logger.error(f"Error converting to PDF: {e}")
-        raise
-
-def convert_to_pdf_using_pandoc(word_file, pdf_file):
-    """Converts the Word document to PDF using Pandoc."""
-    try:
-        pypandoc.convert_file(word_file, 'pdf', outputfile=pdf_file)
     except Exception as e:
         logger.error(f"Error converting to PDF: {e}")
         raise
