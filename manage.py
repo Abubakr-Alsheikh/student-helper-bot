@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import asyncio
 import sys
 from typing import Callable, Dict, Optional
 
@@ -71,16 +72,50 @@ def generate_verbal_questions(args):
     generate_verbal_questions()
 
 
-def generate_questions(args):
-    # Import and run question generation logic
-    num_questions = args.num if hasattr(args, "num") else 10
-    generate_questions(num_questions)
+def generate_questions_from_chatgpt(args):
+    from generating_verable_questions.get_questions_from_excel_as_json import generate_similar_questions_excel
+    from config import VERBAL_FILE
+    from AIModels.chatgpt import get_chatgpt_instance
+    import pandas as pd
+    loop = asyncio.get_event_loop()
+
+    excel_file = VERBAL_FILE
+
+    chatgpt = get_chatgpt_instance()
+    num_questions = args.num if hasattr(args, "num") else 1
+    num_rows = args.row if hasattr(args, "row") else 30
+
+    try:
+        df = pd.read_excel(excel_file)
+        test_df = df.head(num_rows)  # Use .head() to get the first rows
+
+        # Create a temporary Excel file with the test data
+        temp_excel = "temp_test_data.xlsx"
+        test_df.to_excel(temp_excel, index=False)
+
+        new_excel_file = loop.run_until_complete(generate_similar_questions_excel(
+                temp_excel,
+                chatgpt,
+                num_similar_questions=num_questions,
+                temperature=0.7,
+                max_tokens=500,
+            ))
+
+        if new_excel_file:
+            print(f"New questions (test run) saved to {new_excel_file}")
+    except FileNotFoundError:
+        print(f"Error: File {excel_file} not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 
 # Add command-specific arguments
-def setup_generate_questions_args(parser):
+def setup_generate_questions_from_chatgpt_args(parser):
     parser.add_argument(
-        "--num", type=int, default=10, help="Number of questions to generate"
+        "--num", type=int, default=1, help="Number of questions to generate"
+    )
+    parser.add_argument(
+        "--row", type=int, default=30, help="Number of rows to take from the excel file to copy it"
     )
 
 
@@ -100,9 +135,9 @@ def main():
 
     manager.register_command(
         "generate-questions",
-        generate_questions,
+        generate_questions_from_chatgpt,
         "Generate questions",
-        setup_generate_questions_args,
+        setup_generate_questions_from_chatgpt_args,
     )
 
     # Execute the selected command

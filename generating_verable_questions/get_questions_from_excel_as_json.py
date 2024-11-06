@@ -125,14 +125,22 @@ async def generate_similar_questions_excel(
             # Prepare the prompt for ChatGPT
             prompt = f"""
             Generate {num_similar_questions} unique questions with distinct text and new answer options within the same category.
+            Create new answer options, a distinct question text, and ensure all answer choices are varied and relevant.
+            Include correct answer and explanation in Arabic, and at the explanation explain more why the correct option is correct in more depth.
+
             Category: {row['التصنيف الرئيسي']}
             Passage/Context: {row['القطعة']}
             Question: {row['نص السؤال']}
+
             Options:
             A) {row['الخيار أ']}
             B) {row['الخيار ب']}
             C) {row['الخيار ج']}
             D) {row['الخيار د']}
+
+            Correct Option: {row["الجواب الصحيح"]}
+
+            Explanation: {row["الشرح"]}
 
             The output should look like JSON format that follow the keys names, here is an example:
             {question_format[row['التصنيف الرئيسي']]}
