@@ -67,9 +67,9 @@ def create_db(args):
 
 def generate_verbal_questions(args):
     # Import and run question generation logic
-    from utils.question_management import generate_verbal_questions
+    from utils.database import generate_question
 
-    generate_verbal_questions()
+    generate_question()
 
 
 def generate_questions_from_chatgpt(args):

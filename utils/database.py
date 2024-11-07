@@ -21,7 +21,7 @@ def create_connection():
     return conn
 
 
-async def create_tables(update: Update = None, context: CallbackContext = None):
+def create_tables(update: Update = None, context: CallbackContext = None):
     """Creates all the necessary tables in the database."""
 
     os.makedirs(os.path.dirname(DATABASE_FILE), exist_ok=True)
@@ -220,7 +220,7 @@ async def create_tables(update: Update = None, context: CallbackContext = None):
 
 
 def generate_question(update: Update = None, context: CallbackContext = None):
-    generate_questions_with_categories()
+    # generate_questions_with_categories()
     generate_verbal_questions()
 
 
