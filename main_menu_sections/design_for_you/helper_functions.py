@@ -12,6 +12,10 @@ import aiohttp
 from config import DESIGNS_FOR_FEMALE_FILE, DESIGNS_FOR_MALE_FILE
 from utils.database import execute_query, get_data
 from utils.user_management import get_user_data
+import tempfile
+from pdf2image import convert_from_path
+import os
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -52,25 +56,44 @@ def process_powerpoint_design(ppt_file, user_name):
         logger.error(f"Error processing PowerPoint design: {e}")
         raise
 
-
-def convert_ppt_to_image(ppt_file_path, image_file_path):
-    try:
-        prs = Presentation(ppt_file_path)
-        slide = prs.slides[0]
-
-        # Extract shapes from the slide
-        shapes = slide.shapes
-        # Create a blank white image
-        image = Image.new("RGB", (1920, 1080), "white")
-        for shape in shapes:
-            if shape.shape_type == 13:  # 13 is the type for Pictures
-                image.paste(shape.image, (shape.left, shape.top))
-
-        image.save(image_file_path)
-    except Exception as e:
-        logger.error(f"Error converting PPT to image: {e}")
-        raise
-
+def convert_ppt_to_image(ppt_file_path, img_path, dpi=300, image_format="png"):
+    """
+    Converts a PPTX file to images by first converting it to a PDF, then converting each PDF page to an image.
+    
+    Parameters:
+    - ppt_file_path: Path to the input PPTX file
+    - output_dir: Path to the directory where images will be saved
+    - dpi: DPI setting for converting PDF to images (default is 300)
+    - image_format: Format to save images (default is PNG)
+    """
+    
+    # Step 1: Convert PPTX to PDF using LibreOffice
+    with tempfile.TemporaryDirectory() as temp_dir:
+        pdf_filename = os.path.splitext(os.path.basename(ppt_file_path))[0] + ".pdf"
+        pdf_path = os.path.join(temp_dir, pdf_filename)
+        
+        # Run the LibreOffice command to convert PPTX to PDF
+        result = subprocess.run([
+            "libreoffice", "--headless", "--invisible", "--convert-to", "pdf",
+            "--outdir", temp_dir, ppt_file_path
+        ], check=True)
+        
+        # Check if the PDF was created successfully
+        if not os.path.exists(pdf_path):
+            raise FileNotFoundError("PDF conversion failed.")
+        print(f"Converted PPTX to PDF: {pdf_path}")
+        
+        # Step 2: Convert PDF to images
+        images = convert_from_path(pdf_path, dpi=dpi, fmt=image_format)
+        
+        # Step 3: Save images to the specified output directory
+        for i, img in enumerate(images):
+            img.save(img_path, image_format.upper())
+            break
+        
+        print(f"PDF converted to images. Images saved in {img_path}")
+        
+        return img_path
 
 async def download_image(image_url):
     try:
