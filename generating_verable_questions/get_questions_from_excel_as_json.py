@@ -185,10 +185,12 @@ async def generate_similar_questions_excel(
                     except json.JSONDecodeError as e:
                         print(f"JSON decoding error at row {index + 1}: {e}")
                         print(f"Response: {assistant_response}")
-                        raise
+                        break
+                else:
+                    break
             except Exception as e:  # Catch any other errors during generation
                 print(f"Error processing row {index + 1}: {e}")
-                raise # Re-raise to stop
+                break
 
         # Convert the new questions to a DataFrame
         new_df = pd.DataFrame(new_questions)

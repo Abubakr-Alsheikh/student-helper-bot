@@ -115,7 +115,7 @@ class ChatGPT:
             error_message = str(e).lower()
             if "connection" in error_message or "timeout" in error_message:
                 print("Connection error encountered. Raising exception...")
-                raise  # Re-raise if it's a connection issue
+                return None
             else:
                 print(f"Error calling generate_response: {e}")
                 return None
