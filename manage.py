@@ -4,6 +4,8 @@ import asyncio
 import sys
 from typing import Callable, Dict, Optional
 
+from generating_verable_questions.get_questions_from_excel_as_json import generate_similar_questions_excel_batch
+
 
 class CommandManager:
     def __init__(self):
@@ -85,6 +87,8 @@ def generate_questions_from_chatgpt(args):
     chatgpt = get_chatgpt_instance()
     num_questions = args.num if hasattr(args, "num") else 1
     num_rows = args.row if hasattr(args, "row") else 0
+    batch_size = args.batch_size if hasattr(args, "batch_size") else 10  # Set batch size
+
 
     try:
         if num_rows > 0:
@@ -108,16 +112,28 @@ def generate_questions_from_chatgpt(args):
         except (FileNotFoundError, KeyError):
             start_row = 0
             question_number = 1
-
-        new_excel_file = loop.run_until_complete(generate_similar_questions_excel(
+        if batch_size == 0:
+            new_excel_file = loop.run_until_complete(generate_similar_questions_excel(
+                    excel_file,
+                    chatgpt,
+                    num_similar_questions=num_questions,
+                    start_row=start_row,
+                    question_number=question_number,
+                    temperature=0.7,
+                    max_tokens=1000,
+                    file_path=file_path
+                ))
+        else:
+            new_excel_file = loop.run_until_complete(generate_similar_questions_excel_batch(
                 excel_file,
                 chatgpt,
                 num_similar_questions=num_questions,
                 start_row=start_row,
                 question_number=question_number,
                 temperature=0.7,
-                max_tokens=500,
-                file_path=file_path
+                max_tokens=1000,
+                file_path=file_path,
+                batch_size=batch_size
             ))
 
         if new_excel_file:
@@ -136,6 +152,7 @@ def setup_generate_questions_from_chatgpt_args(parser):
     parser.add_argument(
         "--row", type=int, default=0, help="Number of rows to take from the excel file to copy it"
     )
+    parser.add_argument("--batch_size", type=int, default=10, help="Number of rows to process concurrently")
 
 
 def main():

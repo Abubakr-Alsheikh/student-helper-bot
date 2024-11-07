@@ -117,6 +117,8 @@ async def generate_similar_questions_excel(
         new_questions = []
 
         for index, row in df.iloc[start_row:].iterrows():
+            if not pd.notna(row["القطعة"]):
+                continue
             if row['التصنيف الرئيسي'] == "استيعاب المقروء":
                 print("It get to 'استيعاب المقروء' the file has finished")
                 break
@@ -215,6 +217,119 @@ async def generate_similar_questions_excel(
         print(f"An error occurred: {e}")
         return None
 
+
+async def generate_similar_questions_batch(chatgpt_instance, rows, num_similar_questions, question_number, **kwargs):
+    """Generate similar questions for a batch of rows."""
+    tasks = []
+    for index, row in rows.iterrows():
+        # Prepare the prompt for each question
+        if not pd.notna(row["القطعة"]):
+            continue
+        if row['التصنيف الرئيسي'] == "استيعاب المقروء":
+            return None
+        prompt = f"""
+        Generate {num_similar_questions} similar questions with distinct text and new answer options.
+        Crucially, maintain the same underlying logical relationship as the example.
+        Create new answer options and a distinct question text. Ensure all answer choices are varied, plausible, and relevant.
+        Include the correct answer and explanation in Arabic, but keep the explanation as is.
+
+        Main Category: {row['التصنيف الرئيسي']}
+        Example Question: {row['نص السؤال']}
+        Logical Relationship: {row['الشرح']}  <-- This is KEY
+
+        Example Options:
+        A) {row['الخيار أ']}
+        B) {row['الخيار ب']}
+        C) {row['الخيار ج']}
+        D) {row['الخيار د']}
+
+        Correct Example Option: {row["الجواب الصحيح"]}
+        Explaintion: {row['الشرح']}
+
+        Sub-Category:  [Generate a relevant sub-category based on the main category and logical relationship and question, and the specific Arabic grammatical concepts used in the example question. Provide only grammatically relevant sub-categories. Be specific and use Arabic grammar terminology.]
+
+        Return the generated questions as a JSON array of objects, where each object has the following keys:
+        "نص السؤال", "الخيار أ", "الخيار ب", "الخيار ج", "الخيار د", "الشرح", "التصنيف الرئيسي", "الجواب الصحيح", "القطعة"
+
+        Example JSON Output (for one generated question):
+        [
+            {{"نص السؤال": "...", "الخيار أ": "...", "الخيار ب": "...", "الخيار ج": "...", "الخيار د": "...", "الشرح": "...", "التصنيف الرئيسي": "{row['التصنيف الرئيسي']}", "التصنيف الفرعي": "...", "الجواب الصحيح": "...", "القطعة": "{row['القطعة']}"}}
+        ]
+
+        Include a "التصنيف الفرعي" (Sub-Category) key in each object, and saperate the sub categoies by commans. Just remember dont add "Response: ```json" just return the response as JSON
+        """
+        # System message as before
+        system_message = "You are an assistant specialized in creating Arabic verbal reasoning questions with specific logical structures and relevant sub-categories. You have a deep understanding of Arabic grammar."
+
+        # Create a task for each question generation call
+        tasks.append(chatgpt_instance.generate_response(
+            [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt},
+            ],
+            **kwargs
+        ))
+
+    responses = await asyncio.gather(*tasks)  # Run all tasks concurrently
+    questions = []
+    for assistant_response in responses:
+        if assistant_response:
+            try:
+                response_json = json.loads(assistant_response)
+                if isinstance(response_json, list):
+                    for question in response_json:
+                        question["رقم السؤال"] = question_number
+                        questions.append(question)
+                        question_number += 1
+                else:
+                    response_json["رقم السؤال"] = question_number
+                    questions.append(response_json)
+                    question_number += 1
+            except json.JSONDecodeError as e:
+                print(f"JSON decoding error: {e}")
+                continue
+    return questions
+
+
+async def generate_similar_questions_excel_batch(
+    excel_file,
+    chatgpt_instance,
+    num_similar_questions=1,
+    start_row=0,
+    question_number=1,
+    file_path="new_questions.xlsx",
+    batch_size=10,  # Number of rows to process concurrently
+    **kwargs,
+):
+    """Generates similar questions in batches and saves them to Excel."""
+    df = pd.read_excel(excel_file)
+    new_questions = []
+
+    # Process rows in batches
+    for i in range(start_row, len(df), batch_size):
+        batch_rows = df.iloc[i:i+batch_size]
+        questions = await generate_similar_questions_batch(
+            chatgpt_instance, batch_rows, num_similar_questions, question_number, **kwargs
+        )
+        if questions:
+            new_questions.extend(questions)
+            question_number += len(questions)
+            print(f"Processed batch starting from row {i + 1}")
+        else:
+            print("Reached 'استيعاب المقروء'. File processing complete.")
+            break
+
+    # Save new questions to the Excel file
+    new_df = pd.DataFrame(new_questions)
+    if os.path.exists(file_path):
+        existing_df = pd.read_excel(file_path)
+        updated_df = pd.concat([existing_df, new_df], ignore_index=True)
+    else:
+        updated_df = new_df
+
+    updated_df.to_excel(file_path, index=False)
+    print(f"Questions saved to {file_path}")
+    return file_path
 
 async def generate_custom_questions_by_category(
     category: str,
