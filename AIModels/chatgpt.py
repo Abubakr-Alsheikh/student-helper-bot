@@ -112,8 +112,13 @@ class ChatGPT:
             assistant_response = completion.choices[0].message.content
             return assistant_response
         except Exception as e:
-            print(f"Error calling generate_response: {e}")
-            return None
+            error_message = str(e).lower()
+            if "connection" in error_message or "timeout" in error_message:
+                print("Connection error encountered. Raising exception...")
+                raise  # Re-raise if it's a connection issue
+            else:
+                print(f"Error calling generate_response: {e}")
+                return None
 
     async def check_usage_limit(self, user_id: int) -> bool:
         """Checks if the user has reached their daily ChatGPT usage limit."""
