@@ -106,74 +106,89 @@ async def generate_similar_questions_excel(
     excel_file,
     chatgpt_instance,
     num_similar_questions=1,
+    start_row=0,
+    question_number=1,
     file_path="new_questions.xlsx",
     **kwargs,
 ):
-    """Generates similar questions using fine-tuned ChatGPT and formats them for Excel."""
+    """Generates similar questions using ChatGPT and formats them for Excel."""
     try:
         df = pd.read_excel(excel_file)
         new_questions = []
 
-        question_format = {
-            "التناظر اللفظي": '{"نص السؤال": "برتقال:ليمون", "الخيار أ": "قمح:شعير", "الخيار ب": "شاي:زنجبيل", "الخيار ج": "خس:موز", "الخيار د": "فراولة جرجير", "الشرح": "العلاقة: فئات", "التصنيف الرئيسي": "التناظر اللفظي", "الجواب الصحيح": "أ", "القطعة": "-"}',
-            "إكمال الجمل": '{"نص السؤال": "من نظر في........ سلم من النوائب", "الخيار أ": "للعائب", "الخيار ب": "للصائب", "الخيار ج": "المكاسب", "الخيار د": "العواقب", "الشرح": "من نظر في العواقب سلم من النوائب\\nما تنوب عن عمل هذا الشئ اي ما تاتي وهي الصائب والشاكل", "التصنيف الرئيسي": "إكمال الجمل", "الجواب الصحيح": "د", "القطعة": "-"}',
-            "الخطأ السياقي": '{"نص السؤال": "مر على المسلمين زمن كانوا عانون فيه من قيود الاستعمار والتطور", "الخيار أ": "مر", "الخيار ب": "يعانون", "الخيار ج": "قيود", "الخيار د": "التطور", "الشرح": "التصحيح : التخلف ، والجملة الصحيحة مر على المسلمين زمن كانوا يعانون فيه من قيود\\nالاستعمار والتخلف.", "التصنيف الرئيسي": "الخطأ السياقي", "الجواب الصحيح": "د", "القطعة": "-"}',
-            "استيعاب المقروء": '{"نص السؤال": "أنسب عنوان للنص:", "الخيار أ": "تاريخ المياه العذبة", "الخيار ب": "المياه المالحة", "الخيار ج": "طرق تحلية المياه", "الخيار د": "أنواع المياه العذبة", "الشرح": "تحدث النص عن طرق تحلية المياه مثل التقطير و التنافر العكسي", "التصنيف الرئيسي": "استيعاب المقروء", "الجواب الصحيح": "ج", "القطعة": "تنقية المياه"}',
-        }
+        for index, row in df.iloc[start_row:].iterrows():
+            if row['التصنيف الرئيسي'] == "استيعاب المقروء":
+                print("It get to 'استيعاب المقروء' the file has finished")
+                break
+            try:
+                # Prepare the prompt for ChatGPT
+                prompt = f"""
+                Generate {num_similar_questions} similar questions with distinct text and new answer options.
+                Crucially, maintain the same underlying logical relationship as the example.
+                Create new answer options and a distinct question text. Ensure all answer choices are varied, plausible, and relevant.
+                Include the correct answer and explanation in Arabic, but keep the explanation as is.
 
-        for _, row in df.iterrows():
-            # Prepare the prompt for ChatGPT
-            prompt = f"""
-            Generate {num_similar_questions} unique questions with distinct text and new answer options within the same category.
-            Create new answer options, a distinct question text, and ensure all answer choices are varied and relevant.
-            Include correct answer and explanation in Arabic, and at the explanation explain more why the correct option is correct in more depth.
+                Main Category: {row['التصنيف الرئيسي']}
+                Example Question: {row['نص السؤال']}
+                Logical Relationship: {row['الشرح']}  <-- This is KEY
 
-            Category: {row['التصنيف الرئيسي']}
-            Passage/Context: {row['القطعة']}
-            Question: {row['نص السؤال']}
+                Example Options:
+                A) {row['الخيار أ']}
+                B) {row['الخيار ب']}
+                C) {row['الخيار ج']}
+                D) {row['الخيار د']}
 
-            Options:
-            A) {row['الخيار أ']}
-            B) {row['الخيار ب']}
-            C) {row['الخيار ج']}
-            D) {row['الخيار د']}
+                Correct Example Option: {row["الجواب الصحيح"]}
+                Explaintion: {row['الشرح']}
 
-            Correct Option: {row["الجواب الصحيح"]}
+                Sub-Category:  [Generate a relevant sub-category based on the main category and logical relationship.]
 
-            Explanation: {row["الشرح"]}
+                Return the generated questions as a JSON array of objects, where each object has the following keys:
+                "نص السؤال", "الخيار أ", "الخيار ب", "الخيار ج", "الخيار د", "الشرح", "التصنيف الرئيسي", "الجواب الصحيح", "القطعة"
 
-            The output should look like JSON format that follow the keys names, here is an example:
-            {question_format[row['التصنيف الرئيسي']]}
-
-            And if there is more than one question provide all questions in a structured JSON format as a list of objects, just remember dont add "Response: ```json" just return the response as JSON
-            """
-
-            system_message = "You are an assistant trained to generate structured Arabic verbal reasoning questions."
-
-            # Request ChatGPT to generate responses
-            assistant_response = await chatgpt_instance.generate_response(
+                Example JSON Output (for one generated question):
                 [
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": prompt},
-                ],
-                **kwargs,
-            )
+                    {{"نص السؤال": "...", "الخيار أ": "...", "الخيار ب": "...", "الخيار ج": "...", "الخيار د": "...", "الشرح": "...", "التصنيف الرئيسي": "{row['التصنيف الرئيسي']}", "التصنيف الفرعي": "...", "الجواب الصحيح": "...", "القطعة": "{row['القطعة']}"}}
+                ]
 
-            if assistant_response:
-                try:
-                    # Load the response JSON and check if it's a list (multiple questions)
-                    response_json = json.loads(assistant_response)
-                    if isinstance(response_json, list):
-                        # If the response is a list, add each question to new_questions
-                        for question in response_json:
-                            new_questions.append(question)
-                    else:
-                        # If it's a single object, add it as one question
-                        new_questions.append(response_json)
+                Include a "التصنيف الفرعي" (Sub-Category) key in each object, and saperate the sub categoies by commans. Just remember dont add "Response: ```json" just return the response as JSON
+                """
 
-                except json.JSONDecodeError as e:
-                    print(f"JSON decoding error: {e}")
-                    print(f"Response: {assistant_response}")
+                system_message = "You are an assistant specialized in creating Arabic verbal reasoning questions with specific logical structures and relevant sub-categories."
+                # Request ChatGPT to generate responses
+                assistant_response = await chatgpt_instance.generate_response(
+                    [
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": prompt},
+                    ],
+                    **kwargs,
+                )
+
+                if assistant_response:
+                    try:
+                        # Load the response JSON and check if it's a list (multiple questions)
+                        response_json = json.loads(assistant_response)
+                        if isinstance(response_json, list):
+                            # If the response is a list, add each question to new_questions
+                            for question in response_json:
+                                question["رقم السؤال"] = question_number # Add question number
+                                new_questions.append(question)
+                                question_number += 1
+                        else:
+                            # If it's a single object, add it as one question
+                            response_json["رقم السؤال"] = question_number
+                            new_questions.append(response_json)
+                            question_number += 1
+
+                        print(f"The line {index + 1} has finished")
+
+                    except json.JSONDecodeError as e:
+                        print(f"JSON decoding error at row {index + 1}: {e}")
+                        print(f"Response: {assistant_response}")
+                        raise
+            except Exception as e:  # Catch any other errors during generation
+                print(f"Error processing row {index + 1}: {e}")
+                raise # Re-raise to stop
 
         # Convert the new questions to a DataFrame
         new_df = pd.DataFrame(new_questions)
@@ -194,7 +209,6 @@ async def generate_similar_questions_excel(
     except FileNotFoundError:
         print(f"Error: File {excel_file} not found.")
         return None
-
     except Exception as e:
         print(f"An error occurred: {e}")
         return None

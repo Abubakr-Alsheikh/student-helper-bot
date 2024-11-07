@@ -77,32 +77,51 @@ def generate_questions_from_chatgpt(args):
     from config import VERBAL_FILE
     from AIModels.chatgpt import get_chatgpt_instance
     import pandas as pd
+
     loop = asyncio.get_event_loop()
 
     excel_file = VERBAL_FILE
 
     chatgpt = get_chatgpt_instance()
     num_questions = args.num if hasattr(args, "num") else 1
-    num_rows = args.row if hasattr(args, "row") else 30
+    num_rows = args.row if hasattr(args, "row") else 0
 
     try:
-        df = pd.read_excel(excel_file)
-        test_df = df.head(num_rows)  # Use .head() to get the first rows
+        if num_rows > 0:
+            df = pd.read_excel(excel_file)
+            test_df = df.head(num_rows)  # Use .head() to get the first rows
 
-        # Create a temporary Excel file with the test data
-        temp_excel = "temp_test_data.xlsx"
-        test_df.to_excel(temp_excel, index=False)
+            # Create a temporary Excel file with the test data
+            excel_file = "temp_test_data.xlsx"
+            test_df.to_excel(excel_file, index=False)
+
+        file_path="new_questions.xlsx"
+        start_row = 0
+        question_number = 1
+        # Get the last generated question number to continue from
+        try:
+            if num_rows == 0:
+                existing_df = pd.read_excel(file_path)
+                last_question_number = existing_df["رقم السؤال"].max()
+                start_row = len(existing_df) # Start from the next row
+                question_number = last_question_number + 1  # Update question_number
+        except (FileNotFoundError, KeyError):
+            start_row = 0
+            question_number = 1
 
         new_excel_file = loop.run_until_complete(generate_similar_questions_excel(
-                temp_excel,
+                excel_file,
                 chatgpt,
                 num_similar_questions=num_questions,
+                start_row=start_row,
+                question_number=question_number,
                 temperature=0.7,
                 max_tokens=500,
+                file_path=file_path
             ))
 
         if new_excel_file:
-            print(f"New questions (test run) saved to {new_excel_file}")
+            print(f"New questions saved to {new_excel_file}")
     except FileNotFoundError:
         print(f"Error: File {excel_file} not found.")
     except Exception as e:
@@ -115,7 +134,7 @@ def setup_generate_questions_from_chatgpt_args(parser):
         "--num", type=int, default=1, help="Number of questions to generate"
     )
     parser.add_argument(
-        "--row", type=int, default=30, help="Number of rows to take from the excel file to copy it"
+        "--row", type=int, default=0, help="Number of rows to take from the excel file to copy it"
     )
 
 
