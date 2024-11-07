@@ -1,8 +1,10 @@
 import logging
 from docxtpl import DocxTemplate
 from docx2pdf import convert
+import subprocess
 import os
 from datetime import datetime
+import shutil
 
 from config import Q_AND_A_FILE_PATH
 from utils import database
@@ -98,11 +100,26 @@ def generate_word_doc(template_path, output_path, quiz_data):
         logger.error(f"Error generating Word document: {e}")
         raise
 
-
-def convert_to_pdf(word_file, pdf_file):
-    """Converts the Word document to PDF."""
-    try:
-        convert(word_file, pdf_file)
-    except Exception as e:
-        logger.error(f"Error converting to PDF: {e}")
-        raise
+def convert_to_pdf(word_file, pdf_file=None):
+    # Set default output name if pdf_file is not specified
+    if pdf_file is None:
+        pdf_file = os.path.splitext(word_file)[0] + ".pdf"
+    
+    # Set a temporary directory for the output to handle custom names
+    temp_dir = os.path.dirname(pdf_file)
+    temp_pdf_path = os.path.join(temp_dir, os.path.splitext(os.path.basename(word_file))[0] + ".pdf")
+    
+    # Run the LibreOffice command to convert to PDF in temp directory
+    result = subprocess.run([
+        "libreoffice", "--headless", "--convert-to", "pdf", "--outdir",
+        temp_dir, word_file
+    ], check=True)
+    
+    # Rename to the specified pdf_file name if it differs from temp_pdf_path
+    if os.path.exists(temp_pdf_path):
+        if temp_pdf_path != pdf_file:
+            shutil.move(temp_pdf_path, pdf_file)
+        print(f"Conversion successful: {pdf_file}")
+        return pdf_file
+    else:
+        raise FileNotFoundError("PDF conversion failed.")
