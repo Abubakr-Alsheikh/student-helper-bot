@@ -50,7 +50,6 @@ def create_tables(update: Update = None, context: CallbackContext = None):
             person_referred_me TEXT,
             number_of_referrals INTEGER,
             telegram_username TEXT,
-            telegram_id INTEGER,
             personal_photo_link TEXT,
             telegram_bio TEXT,
             notifications_enabled BOOLEAN DEFAULT TRUE
@@ -216,6 +215,7 @@ def create_tables(update: Update = None, context: CallbackContext = None):
     )
     conn.commit()
     conn.close()
+    print("Database Created.")
 
 
 def get_data(query, params=None):

@@ -133,6 +133,8 @@ def generate_verbal_questions():
             ),
         )
 
+    print("Questions has finished creating it.")
+
 
 def get_passage_content(context_folder, passage_name):
     """Fetches the passage content based on the passage_name."""
@@ -163,18 +165,15 @@ def create_context_files(excel_file, output_dir):
             file_name = row['اسم القطعة']
             context = row['النص']
 
-            # Sanitize file name (remove invalid characters, etc.)  --- IMPORTANT FOR SECURITY
-            file_name = "".join(c for c in file_name if c.isalnum() or c in ("_", "-")).rstrip()
-
             file_path = os.path.join(output_dir, f"{file_name}.txt")
 
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(str(context)) # Handle potential None values
-                print(f"Created: {file_path}")
             except Exception as e:
                 print(f"Error writing file {file_name}.txt: {e}")
 
+        print("Context Files Created.")
     except FileNotFoundError:
         print(f"Error: Excel file not found at {excel_file}")
     except Exception as e:
