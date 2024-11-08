@@ -74,6 +74,15 @@ def generate_verbal_questions(args):
     generate_question()
 
 
+def create_context_files_command(args):
+    """Creates context files from Excel data."""
+    from utils.question_management import create_context_files
+    from config import ARABIC_PARAGHRAPHS_MK_EXCEL_FILE, CONTEXT_DIRECTORY
+
+    excel_file = ARABIC_PARAGHRAPHS_MK_EXCEL_FILE  # Access the excel_file argument
+    output_dir = CONTEXT_DIRECTORY # Access the output_dir argument
+    create_context_files(excel_file, output_dir)
+
 def generate_questions_from_chatgpt(args):
     from generating_verable_questions.get_questions_from_excel_as_json import generate_similar_questions_excel
     from config import VERBAL_FILE
@@ -167,6 +176,12 @@ def main():
         "generate-verbal",
         generate_verbal_questions,
         "Putting the questions from excel file to database",
+    )
+
+    manager.register_command(
+        "create-contexts",
+        create_context_files_command,
+        "Create context files from Excel",
     )
 
     manager.register_command(

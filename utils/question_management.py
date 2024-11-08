@@ -142,6 +142,42 @@ def get_passage_content(context_folder, passage_name):
     return ""
 
 
+def create_context_files(excel_file, output_dir):
+    """
+    Creates individual text files for each context from an Excel file.
+
+    Args:
+        excel_file (str): Path to the Excel file containing file names and contexts.
+        output_dir (str): Path to the directory where context files will be saved.
+    """
+
+    try:
+        # Create the output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+
+        df = pd.read_excel(excel_file)
+
+        for index, row in df.iterrows():
+            file_name = row['اسم القطعة']
+            context = row['النص']
+
+            # Sanitize file name (remove invalid characters, etc.)  --- IMPORTANT FOR SECURITY
+            file_name = "".join(c for c in file_name if c.isalnum() or c in ("_", "-")).rstrip()
+
+            file_path = os.path.join(output_dir, f"{file_name}.txt")
+
+            try:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(str(context)) # Handle potential None values
+                print(f"Created: {file_path}")
+            except Exception as e:
+                print(f"Error writing file {file_name}.txt: {e}")
+
+    except FileNotFoundError:
+        print(f"Error: Excel file not found at {excel_file}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
 def generate_questions():
     # Check if data already exists in the table
     count = database.get_data("SELECT COUNT(*) FROM questions")

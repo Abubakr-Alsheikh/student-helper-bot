@@ -65,7 +65,8 @@ FAQ_FILE = os.path.join(EXCEL_FILES_DIRECTORY, "الاسئلة الشائعة.xl
 VERBEL_FILES_DIRECTORY = os.path.join(MAIN_FILES, "Verbel Files")
 VERBAL_FILE = os.path.join(VERBEL_FILES_DIRECTORY, "الاسئلة اللفظية.xlsx")
 
-CONTEXT_DIRECTORY = os.path.join(VERBEL_FILES_DIRECTORY, "Context")
+CONTEXT_DIRECTORY = os.path.join(VERBEL_FILES_DIRECTORY, "القطع")
+ARABIC_PARAGHRAPHS_MK_EXCEL_FILE = os.path.join(VERBEL_FILES_DIRECTORY, "All_Arabic_Final_MK2.xlsx")
 
 # ----------------
 # Rewards Files directory
