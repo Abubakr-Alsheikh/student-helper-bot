@@ -1,17 +1,15 @@
 import logging
-from docxtpl import DocxTemplate
-import subprocess
 import os
 from datetime import datetime
-import shutil
 
 from config import Q_AND_A_FILE_PATH
+from templateMaker.file_exports import convert_to_pdf, generate_word_doc
 from utils import database
 
 logger = logging.getLogger(__name__)
 
 
-def generate_quiz_pdf(questions, user_id, category_name=None):
+async def generate_quiz_pdf(questions, user_id, category_name=None):
     """
     Generates a PDF quiz with the given questions using a Word template.
     Args:
@@ -67,8 +65,16 @@ def generate_quiz_pdf(questions, user_id, category_name=None):
             user_dir, f"الاختبار_يوم_{datestamp}_الوقت_{timestamp}.pdf"
         )
 
-        generate_word_doc(Q_AND_A_FILE_PATH, word_filename, quiz_data)
-        convert_to_pdf(word_filename, pdf_filename)
+        try:
+            await generate_word_doc(Q_AND_A_FILE_PATH, word_filename, quiz_data)
+        except Exception as e:
+            logger.error(f"Error generating Word doc: {e}")
+            return None
+        try:
+            await convert_to_pdf(word_filename, pdf_filename)
+        except Exception as e:
+            logger.error(f"Error converting to PDF: {e}")
+            return None
 
         # 5. Cleanup the temporary Word file
         if os.path.exists(word_filename):
@@ -78,39 +84,3 @@ def generate_quiz_pdf(questions, user_id, category_name=None):
     except Exception as e:
         logger.error(f"An unexpected error occurred in generate_quiz_pdf: {e}")
         return None
-
-
-def generate_word_doc(template_path, output_path, quiz_data):
-    """Generates the Word document."""
-    try:
-        doc = DocxTemplate(template_path)
-        doc.render({"questions": quiz_data})
-        doc.save(output_path)
-    except Exception as e:
-        logger.error(f"Error generating Word document: {e}")
-        raise
-
-
-def convert_to_pdf(word_file, pdf_file=None):
-    # Set default output name if pdf_file is not specified
-    if pdf_file is None:
-        pdf_file = os.path.splitext(word_file)[0] + ".pdf"
-    
-    # Set a temporary directory for the output to handle custom names
-    temp_dir = os.path.dirname(pdf_file)
-    temp_pdf_path = os.path.join(temp_dir, os.path.splitext(os.path.basename(word_file))[0] + ".pdf")
-    
-    # Run the LibreOffice command to convert to PDF in temp directory
-    result = subprocess.run([
-        "libreoffice", "--headless", "--convert-to", "pdf", "--outdir",
-        temp_dir, word_file
-    ], check=True)
-    
-    # Rename to the specified pdf_file name if it differs from temp_pdf_path
-    if os.path.exists(temp_pdf_path):
-        if temp_pdf_path != pdf_file:
-            shutil.move(temp_pdf_path, pdf_file)
-        print(f"Conversion successful: {pdf_file}")
-        return pdf_file
-    else:
-        raise FileNotFoundError("PDF conversion failed.")

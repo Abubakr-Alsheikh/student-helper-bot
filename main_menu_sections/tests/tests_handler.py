@@ -1,5 +1,4 @@
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
 import random
@@ -49,10 +48,6 @@ logger = logging.getLogger(__name__)
 CATEGORIES_PER_PAGE = 10
 CHATTING = 0
 
-
-executor = ThreadPoolExecutor(
-    max_workers=2
-)
 
 async def handle_tests(update: Update, context: CallbackContext):
     """Handles the 'الاختبارات' option and displays its sub-menu."""
@@ -696,17 +691,7 @@ async def end_quiz(update: Update, context: CallbackContext):
             logger.error(f"Invalid category_type: {category_type}")
             category_name = "غير محدد"
 
-        def generate_pdf_wrapper(questions, user_id, category_name):
-            try:
-                return generate_quiz_pdf(questions, user_id, category_name)
-            except Exception as e:
-                logger.error(f"Error generating PDF: {e}")
-                return None
-
-        loop = asyncio.get_running_loop()  # Get the event loop
-        pdf_filepath = await loop.run_in_executor(
-            executor, generate_pdf_wrapper, questions, user_id, category_name
-        )
+        pdf_filepath = await generate_quiz_pdf(questions, user_id, category_name)
 
         if pdf_filepath is None:  # Check if PDF generation failed
             await update.effective_message.reply_text("حدث خطأ أثناء إنشاء ملف PDF. ⚠️")

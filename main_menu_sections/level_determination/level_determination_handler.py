@@ -497,17 +497,8 @@ async def end_quiz(update: Update, context: CallbackContext):
 
     await update.effective_message.reply_text("انتظر قليلا جاري إنشاء ملف pdf... 📄")
 
-    def generate_pdf_wrapper(questions, user_id):
-        try:
-            return generate_quiz_pdf(questions, user_id)
-        except Exception as e:
-            logger.error(f"Error generating PDF: {e}")
-            return None
 
-    loop = asyncio.get_running_loop()  # Get the event loop
-    pdf_filepath = await loop.run_in_executor(
-        executor, generate_pdf_wrapper, questions, user_id
-    )
+    pdf_filepath = await generate_quiz_pdf(questions, user_id)
 
     if pdf_filepath is None:  # Check if PDF generation failed
         await update.effective_message.reply_text("حدث خطأ أثناء إنشاء ملف PDF. ⚠️")
