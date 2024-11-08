@@ -1,6 +1,5 @@
 import logging
 from docxtpl import DocxTemplate
-from docx2pdf import convert
 import subprocess
 import os
 from datetime import datetime
@@ -8,7 +7,7 @@ import shutil
 
 from config import Q_AND_A_FILE_PATH
 from utils import database
-#import pypandoc
+
 logger = logging.getLogger(__name__)
 
 
@@ -91,13 +90,6 @@ def generate_word_doc(template_path, output_path, quiz_data):
         logger.error(f"Error generating Word document: {e}")
         raise
 
-def convert_to_pdf_using_pandoc(word_file, pdf_file):
-    """Converts the Word document to PDF using Pandoc."""
-    try:
-        pypandoc.convert_file(word_file, 'pdf', outputfile=pdf_file)
-    except Exception as e:
-        logger.error(f"Error converting to PDF: {e}")
-        raise
 
 def convert_to_pdf(word_file, pdf_file=None):
     # Set default output name if pdf_file is not specified

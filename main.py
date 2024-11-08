@@ -18,7 +18,6 @@ from handlers.personal_assistant_chat_handler import (
 from handlers.help_support_handler import help_support_handler
 from utils.database import create_tables
 from utils.motivation.button_click_tracker import load_motivational_messages
-from utils.question_management import generate_verbal_questions
 from utils.reminders import register_reminders_handlers
 
 # Enable logging
@@ -48,8 +47,7 @@ def main():
     loop = asyncio.get_event_loop()
     # Check if the database file exists
     if not os.path.exists(DATABASE_FILE):
-        loop.run_until_complete(create_tables())
-        loop.run_until_complete(generate_verbal_questions())
+        create_tables()
 
     request = HTTPXRequest(
         connect_timeout=20.0,  # Increase the connection timeout (default is 5.0)

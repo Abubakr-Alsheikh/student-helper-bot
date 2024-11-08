@@ -52,6 +52,11 @@ class CommandManager:
 
 
 # Example command handlers
+def runbot(args):
+    from main import main as bot
+    bot()
+
+
 def finetune(args):
     from generating_verable_questions.get_questions_from_excel_as_json import (
         generate_fine_tuning_data,
@@ -169,6 +174,8 @@ def main():
     manager = CommandManager()
 
     # Register commands with their handlers
+    manager.register_command("runbot", runbot, "Start running the bot")
+
     manager.register_command("finetune", finetune, "Run the fine-tuning process")
 
     manager.register_command("createdb", create_db, "Create the database")
