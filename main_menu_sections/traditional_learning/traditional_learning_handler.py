@@ -268,7 +268,7 @@ async def handle_material_selection(update: Update, context: CallbackContext):
     )[0][0]
 
     subcategory_path = os.path.join(
-        "templateMaker\Main_Classification_Structure",
+        "template_maker\Main_Classification_Structure",
         main_category_name,
         subcategory_name,
     )

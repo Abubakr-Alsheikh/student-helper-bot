@@ -9,9 +9,9 @@ images/*.png
 
 user_tests/
 
-templateMaker/*.docx
-templateMaker/*.pptx
-templateMaker/*.pdf
+template_maker/*.docx
+template_maker/*.pptx
+template_maker/*.pdf
 
 temp/
 

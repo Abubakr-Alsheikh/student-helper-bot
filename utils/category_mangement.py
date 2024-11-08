@@ -66,7 +66,7 @@ def get_material_path(main_category_name, subcategory_name, material_number, for
     
     Important: This function assumes your folder structure and file naming conventions.
     """
-    base_path = "templateMaker\Main_Classification_Structure"  # Update if needed
+    base_path = "template_maker\Main_Classification_Structure"  # Update if needed
     folder_name = f"نموذج {material_number}"
     file_name = folder_name
 

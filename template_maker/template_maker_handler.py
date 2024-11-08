@@ -3,18 +3,18 @@ import os
 
 from telegram import Update
 from telegram.ext import CallbackContext
-from templateMaker.content_population import (
+from template_maker.content_population import (
     find_expression,
     generate_number,
     replace_placeholders_in_powerpoint,
     replace_placeholders_in_word,
 )
-from templateMaker.data_preparation import (
+from template_maker.data_preparation import (
     load_powerpoint_template,
     read_excel_data,
 )
-from templateMaker.file_exports import convert_docx_to_pdf, convert_pptx_to_mp4
-from templateMaker.q_and_a_update import q_and_a_document
+from template_maker.file_exports import convert_docx_to_pdf, convert_pptx_to_mp4
+from template_maker.q_and_a_update import q_and_a_document
 
 
 def sanitize_folder_name(name):

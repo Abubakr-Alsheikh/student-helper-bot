@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 
 from config import Q_AND_A_FILE_PATH
-from templateMaker.file_exports import convert_to_pdf, generate_word_doc
+from template_maker.file_exports import convert_docx_to_pdf, generate_word_doc
 from utils import database
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ async def generate_quiz_pdf(questions, user_id, category_name=None):
             logger.error(f"Error generating Word doc: {e}")
             return None
         try:
-            await convert_to_pdf(word_filename, pdf_filename)
+            await convert_docx_to_pdf(word_filename, pdf_filename)
         except Exception as e:
             logger.error(f"Error converting to PDF: {e}")
             return None

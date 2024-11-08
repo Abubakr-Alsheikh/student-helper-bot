@@ -23,7 +23,7 @@ async def generate_word_doc(template_path, output_path, quiz_data):
         raise
 
 
-async def convert_to_pdf(word_file, pdf_file=None):
+async def convert_docx_to_pdf(word_file, pdf_file=None):
     # Set default output name if pdf_file is not specified
     if pdf_file is None:
         pdf_file = os.path.splitext(word_file)[0] + ".pdf"
