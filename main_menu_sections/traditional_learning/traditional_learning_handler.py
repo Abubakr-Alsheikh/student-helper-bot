@@ -100,7 +100,10 @@ async def handle_show_main_categories(update: Update, context: CallbackContext):
     )
     keyboard = []
     for category in categories:
-        callback_data = f"s_sub_c:{category[0]}"
+        if context.user_data.get("question_type") == "verbal":
+            callback_data = f"sel_mat:{category[0]}:0" #  0 for subcategory as it's not used in verbal
+        else:
+            callback_data = f"s_sub_c:{category[0]}" # Existing logic for quantitative
         keyboard.append(
             [InlineKeyboardButton(category[1], callback_data=callback_data)]
         )
@@ -308,50 +311,110 @@ async def handle_material_selection(update: Update, context: CallbackContext):
     """Handles material selection and displays format choices."""
 
     callback_data = update.callback_query.data
-    _, main_category_id, subcategory_id = callback_data.split(":", 2)
+    parts = callback_data.split(":")
+    main_category_id = int(parts[1])
+    page = int(parts[3]) if len(parts) > 3 else 1  # Extract page number
+    QUESTIONS_PER_PAGE = 10
 
     main_category_name = get_data(
         "SELECT name FROM main_categories WHERE id = ?", (main_category_id,)
     )[0][0]
 
-    subcategory_name = get_data(
-        "SELECT name FROM subcategories WHERE id = ?", (subcategory_id,)
-    )[0][0]
-
-    subcategory_path = os.path.join(
-        "template_maker\Main_Classification_Structure",
-        main_category_name,
-        subcategory_name,
-    )
-
-    if not os.path.exists(subcategory_path):
-        await update.callback_query.message.reply_text(
-            f"لم يتم انشاء النماذج لهذا النوع 🚫"
+    if context.user_data.get("question_type") == "verbal":
+        subcategory_id = 0  # Placeholder for verbal
+        questions = get_data(
+            """
+            SELECT id, question_text 
+            FROM questions 
+            WHERE main_category_id = ? AND question_type = 'verbal'
+            LIMIT ? OFFSET ?
+            """,
+            (main_category_id, QUESTIONS_PER_PAGE, (page - 1) * QUESTIONS_PER_PAGE),
         )
+        total_questions = get_data( # Getting the total for pagination of verbal questions.
+            """
+            SELECT COUNT(*)
+            FROM questions
+            WHERE main_category_id = ? AND question_type = 'verbal'
+            """,
+            (main_category_id,),
+        )[0][0]
+
+        back_button_data = "traditional_learning:verbal"
+    else:
+        subcategory_id = int(parts[2])
+        subcategory_name = get_data(
+            "SELECT name FROM subcategories WHERE id = ?", (subcategory_id,)
+        )[0][0]
+        questions = get_data(
+             """
+            SELECT id, question_text 
+            FROM questions 
+            WHERE main_category_id = ? AND subcategory_id = ?
+            LIMIT ? OFFSET ?
+            """,
+            (main_category_id, subcategory_id, QUESTIONS_PER_PAGE, (page - 1) * QUESTIONS_PER_PAGE),
+        )
+        total_questions = get_data(
+            """
+            SELECT COUNT(*)
+            FROM questions
+            WHERE main_category_id = ? AND subcategory_id = ?
+            """,
+             (main_category_id, subcategory_id),
+        )[0][0]
+
+
+        back_button_data = "show_subcategories"  # Or appropriate back action
+
+
+    if not questions:
+        await update.callback_query.message.reply_text("لا توجد نماذج لهذا النوع 🚫")
         return
 
-    material_folders = [
-        f
-        for f in os.listdir(subcategory_path)
-        if os.path.isdir(os.path.join(subcategory_path, f))
-    ]
-
     keyboard = []
-    for material_folder in material_folders:
-        material_number = material_folder.split(" ")[1]
-        callback_data = (
-            f"show_format_options:{main_category_id}:{subcategory_id}:{material_number}"
+    for question_id, question_text in questions:
+        # Use question_id as material_number
+        callback_data = f"show_format_options:{main_category_id}:{subcategory_id}:{question_id}"
+        # Display question text with number
+        display_text = f"نموذج {question_id}: {question_text}"
+        keyboard.append([InlineKeyboardButton(display_text, callback_data=callback_data)])
+
+    # Pagination buttons
+    total_pages = (total_questions + QUESTIONS_PER_PAGE - 1) // QUESTIONS_PER_PAGE
+    pagination_buttons = []
+    if page > 1:
+        pagination_buttons.append(
+            InlineKeyboardButton(
+                "السابق ⏪",
+                callback_data=f"sel_mat:{main_category_id}:{subcategory_id}:{page - 1}",
+            )
         )
-        keyboard.append(
-            [InlineKeyboardButton(material_folder, callback_data=callback_data)]
+    if page < total_pages:
+        pagination_buttons.append(
+            InlineKeyboardButton(
+                "التالي ⏩",
+                callback_data=f"sel_mat:{main_category_id}:{subcategory_id}:{page + 1}",
+            )
         )
+    if pagination_buttons:
+        keyboard.append(pagination_buttons)
+
     keyboard.append(
-        [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data="traditional_learning")]
+        [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data=back_button_data)] # Use correct variable
     )
+
     reply_markup = InlineKeyboardMarkup(keyboard)
+
+
+    if context.user_data.get("question_type") == "verbal":
+        message_text = f"اختر رقم النموذج من '{main_category_name}':"
+    else:
+        message_text = (f"اختر رقم النموذج من '{main_category_name}' من التصنيف الفرعي '{subcategory_name}':")
+
+
     await update.callback_query.edit_message_text(
-        f"اختر رقم النموذج من '{main_category_name}' من التصنيف الفرعي '{subcategory_name}':",
-        reply_markup=reply_markup,
+       f"{message_text} (الصفحة {page} من {total_pages}):", reply_markup=reply_markup
     )
 
 
@@ -449,6 +512,7 @@ TRADITIONAL_LEARNING_HANDLERS_PATTERNS = {
     r"^show_main_for_sub:(\d+)$": handle_show_subcategories,
     r"^show_main_for_sub:(\d+):(\d+)$": handle_show_subcategories,
     r"^sel_mat:(\d+):(\d+)$": handle_material_selection,
+    r"^sel_mat:(\d+):(\d+):(\d+)$": handle_material_selection,
     r"^show_format_options:\w+:\w+:\d+$": handle_show_format_options,
     r"^send_material:\w+:\w+:\d+:(text|pdf|video)$": handle_send_material,
 }
