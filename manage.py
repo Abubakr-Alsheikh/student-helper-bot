@@ -56,7 +56,6 @@ def runbot(args):
     from main import main as bot
     bot()
 
-
 def finetune(args):
     from generating_verable_questions.get_questions_from_excel_as_json import (
         generate_fine_tuning_data,
@@ -170,11 +169,18 @@ def setup_generate_questions_from_chatgpt_args(parser):
     parser.add_argument("--batch_size", type=int, default=10, help="Number of rows to process concurrently")
 
 
+def initbot(args):
+    create_db(args)
+    generate_verbal_questions(args)
+    create_context_files_command(args)
+
 def main():
     manager = CommandManager()
 
     # Register commands with their handlers
     manager.register_command("runbot", runbot, "Start running the bot")
+
+    manager.register_command("initbot", initbot, "Initializing the bot")
 
     manager.register_command("finetune", finetune, "Run the fine-tuning process")
 
