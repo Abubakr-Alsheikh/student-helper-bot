@@ -231,17 +231,30 @@ def get_data(query, params=None):
     return data
 
 
-def execute_query(query, params=None):
-    """Executes a non-SELECT query (e.g., INSERT, UPDATE, DELETE)."""
+def execute_query(query, params=None, commit=True, fetch_all=False, fetch_one=False):
+    """Executes a query. Optionally commits, fetches results, and handles connection closing."""
     conn = create_connection()
-    cursor = conn.cursor()
-    if params:
-        cursor.execute(query, params)
-    else:
-        cursor.execute(query)
-    conn.commit()
-    conn.close()
+    if not conn:
+        return None
 
+    cursor = conn.cursor()
+    result = None
+    description = None  # Store the description here
+
+    try:
+        cursor.execute(query, params or ())
+        if commit:
+            conn.commit()
+        if fetch_all:
+            result = cursor.fetchall() 
+        if fetch_one:
+            result = cursor.fetchone() 
+        description = cursor.description # Fetch description here
+    except sqlite3.Error as e:
+        print(e)
+    finally:
+        conn.close()
+    return result, description  # Return both the result and the description
 
 def execute_query_return_id(query, params=None):
     """Executes a non-SELECT query and returns the last inserted row ID."""

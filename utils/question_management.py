@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 
 from config import DATABASE_FILE, EXCEL_FILE_BASHAR, VERBAL_FILE
-from utils.database import get_data, execute_query
+from utils.database import create_connection, get_data, execute_query
 
 
 def generate_questions_with_categories():
@@ -246,82 +246,57 @@ def get_questions_by_category(category_id, num_questions, category_type, questio
         category_type (str): 'main_category_id' or 'sub_category_id'.
         question_type (str): 'verbal' or 'quantitative'.
     """
-    conn = sqlite3.connect(DATABASE_FILE)
-    cursor = conn.cursor()
-
     if category_type == "main_category_id":
-        cursor.execute(
-            """
+        query = """
             SELECT * FROM questions
             WHERE main_category_id = ? AND question_type = ?
             ORDER BY RANDOM()
             LIMIT ?
-            """,
-            (category_id, question_type, num_questions),
-        )
+        """
     elif category_type == "sub_category_id":
-        cursor.execute(
-            """
+        query = """
             SELECT q.* FROM questions q
             JOIN main_sub_links msl ON q.main_category_id = msl.main_category_id
             WHERE msl.subcategory_id = ? AND q.question_type = ?
             ORDER BY RANDOM()
             LIMIT ?
-            """,
-            (category_id, question_type, num_questions),
-        )
+        """
     else:
         raise ValueError(
             "Invalid category_type. Must be 'main_category_id' or 'sub_category_id'."
         )
-
-    questions = cursor.fetchall()
-    conn.close()
-    return questions
-
-
-def connect_db():
-    return sqlite3.connect(DATABASE_FILE)
+    
+    return execute_query(query, (category_id, question_type, num_questions), fetch=True)
 
 
 def get_random_question():
-    with connect_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM questions ORDER BY RANDOM() LIMIT 1")
-        question_data = cursor.fetchone()
-
-    if question_data:
-        column_names = [description[0] for description in cursor.description]
-        return dict(zip(column_names, question_data))
-    else:
-        return None
-
+    result, description = execute_query("SELECT * FROM questions ORDER BY RANDOM() LIMIT 1", fetch_one=True) # Expecting single row
+    if result is not None and result: # make sure to check result is valid
+        return dict(zip((col[0] for col in description), result))
+    return None
 
 def get_question_by_id(question_id):
-    with connect_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM questions WHERE id = ?", (question_id,))
-        question_data = cursor.fetchone()
-
-    if question_data:
-        column_names = [description[0] for description in cursor.description]
-        return dict(zip(column_names, question_data))
-    else:
-        return None
-
+    result, description = execute_query("SELECT * FROM questions WHERE id = ?", (question_id,), fetch_one=True)
+    if result is not None and result:
+        return dict(zip((col[0] for col in description), result))
+    return None
 
 def update_learning_progress(user_id, question_id, answered_correctly):
-    with connect_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO learning_progress (user_id, question_id, answered_correctly)
-            VALUES (?, ?, ?)
-        """,
-            (user_id, question_id, answered_correctly),
-        )
-        conn.commit()
+    query = """
+        INSERT INTO learning_progress (user_id, question_id, answered_correctly)
+        VALUES (?, ?, ?)
+    """
+    execute_query(query, (user_id, question_id, answered_correctly))
 
+
+def get_user_questions_for_review(user_id):
+    query = """
+        SELECT q.question_text, q.correct_answer, lp.answered_correctly
+        FROM questions q
+        JOIN learning_progress lp ON q.id = lp.question_id
+        WHERE lp.user_id = ?
+    """
+    return get_data(query, (user_id,))
 
 def format_question_for_chatgpt(question_data):
     return (
@@ -332,7 +307,6 @@ def format_question_for_chatgpt(question_data):
         f"D: {question_data['option_d']}\n"
     )
 
-
 def format_question_for_user(question_data):
     return (
         f"{question_data['question_text']}\n\n"
@@ -341,19 +315,3 @@ def format_question_for_user(question_data):
         f"ج: {question_data['option_c']}\n"
         f"د: {question_data['option_d']}"
     )
-
-
-def get_user_questions_for_review(user_id):
-    """Retrieves questions the user has answered for review."""
-    with connect_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT q.question_text, q.correct_answer, lp.answered_correctly
-            FROM questions q
-            JOIN learning_progress lp ON q.id = lp.question_id
-            WHERE lp.user_id = ?
-        """,
-            (user_id,),
-        )
-        return cursor.fetchall()
