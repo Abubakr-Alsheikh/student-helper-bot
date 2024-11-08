@@ -213,6 +213,10 @@ def generate_questions():
             )
 
 
+def generate_question():
+    # generate_questions_with_categories()
+    generate_verbal_questions()
+
 def get_random_questions(num_questions, question_type):
     """Retrieves a specified number of random questions from the database."""
     # Step 1: Retrieve a random set of questions

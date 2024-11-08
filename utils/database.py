@@ -4,10 +4,6 @@ import sqlite3
 from telegram import Update
 from telegram.ext import CallbackContext
 from config import DATABASE_FILE
-from utils.question_management import (
-    generate_questions_with_categories,
-    generate_verbal_questions,
-)
 
 
 def create_connection():
@@ -217,11 +213,6 @@ def create_tables(update: Update = None, context: CallbackContext = None):
     )
     conn.commit()
     conn.close()
-
-
-def generate_question(update: Update = None, context: CallbackContext = None):
-    # generate_questions_with_categories()
-    generate_verbal_questions()
 
 
 def get_data(query, params=None):

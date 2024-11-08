@@ -4,7 +4,7 @@ import asyncio
 import sys
 from typing import Callable, Dict, Optional
 
-from generating_verable_questions.get_questions_from_excel_as_json import generate_similar_questions_excel_batch
+
 
 
 class CommandManager:
@@ -69,7 +69,7 @@ def create_db(args):
 
 def generate_verbal_questions(args):
     # Import and run question generation logic
-    from utils.database import generate_question
+    from utils.question_management import generate_question
 
     generate_question()
 
@@ -85,6 +85,7 @@ def create_context_files_command(args):
 
 def generate_questions_from_chatgpt(args):
     from generating_verable_questions.get_questions_from_excel_as_json import generate_similar_questions_excel
+    from generating_verable_questions.get_questions_from_excel_as_json import generate_similar_questions_excel_batch
     from config import VERBAL_FILE
     from AIModels.chatgpt import get_chatgpt_instance
     import pandas as pd
