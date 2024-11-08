@@ -29,7 +29,7 @@ def create_tables(update: Update = None, context: CallbackContext = None):
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER PRIMARY KEY,
             start_time TEXT,
             name TEXT,
             class TEXT,
@@ -73,9 +73,11 @@ def create_tables(update: Update = None, context: CallbackContext = None):
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS chatgpt_usage (
-            user_id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
             usage_count INTEGER DEFAULT 0,
-            last_used TEXT  -- Store the date of last usage (YYYY-MM-DD format)
+            last_used TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
         );
     """
     )
@@ -144,7 +146,7 @@ def create_tables(update: Update = None, context: CallbackContext = None):
             percentage REAL,
             time_taken REAL,
             pdf_path TEXT,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
         )
     """
     )
@@ -207,7 +209,8 @@ def create_tables(update: Update = None, context: CallbackContext = None):
             id INTEGER PRIMARY KEY,
             user_id INTEGER,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            messages TEXT
+            messages TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
         )
     """
     )
