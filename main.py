@@ -79,7 +79,7 @@ def main():
     loop.run_until_complete(register_reminders_handlers(application))
 
     # Start the bot. This will block until the bot stops.
-    application.run_polling(poll_interval=2, timeout=15)
+    application.run_polling(poll_interval=0.5, timeout=15)
 
 
 if __name__ == "__main__":
