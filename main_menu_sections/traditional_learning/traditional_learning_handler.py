@@ -3,6 +3,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CallbackContext
 from telegram.error import BadRequest
 from config import UNDER_DEVLOPING_MESSAGE
+from main_menu_sections.traditional_learning.generating_materials import generate_material_pdf, generate_material_text, generate_material_video
 from utils.category_mangement import (
     get_main_categories_by_subcategory,
     get_material_path,
@@ -306,9 +307,8 @@ async def handle_show_subcategories(update: Update, context: CallbackContext):
                     "حدث خطأ، يرجى المحاولة مرة أخرى لاحقًا. ⚠️"
                 )
 
-
 async def handle_material_selection(update: Update, context: CallbackContext):
-    """Handles material selection and displays format choices."""
+    """Handles material selection and displays questions from the database."""
 
     callback_data = update.callback_query.data
     parts = callback_data.split(":")
@@ -417,84 +417,79 @@ async def handle_material_selection(update: Update, context: CallbackContext):
        f"{message_text} (الصفحة {page} من {total_pages}):", reply_markup=reply_markup
     )
 
-
 async def handle_show_format_options(update: Update, context: CallbackContext):
-    """Displays format options (text, PDF, video) for the selected material."""
+    """Displays format options for the selected question."""
 
     callback_data = update.callback_query.data
-    _, main_category_id, subcategory_id, material_number = callback_data.split(":", 3)
+    _, main_category_id, subcategory_id, question_id = callback_data.split(":", 3)
+
+    # Store these values in context.user_data for use in handle_send_material
+    context.user_data["material_data"] = {
+        "main_category_id": main_category_id,
+        "subcategory_id": subcategory_id,
+        "question_id": question_id,
+    }
+
 
     keyboard = [
         [
-            InlineKeyboardButton(
-                "نص 📝",
-                callback_data=f"send_material:{main_category_id}:{subcategory_id}:{material_number}:text",
-            )
+            InlineKeyboardButton("نص 📝", callback_data="send_material:text"),
+            InlineKeyboardButton("PDF 📄", callback_data="send_material:pdf"),
+            InlineKeyboardButton("فيديو 🎥", callback_data="send_material:video"),
         ],
         [
             InlineKeyboardButton(
-                "PDF 📄",
-                callback_data=f"send_material:{main_category_id}:{subcategory_id}:{material_number}:pdf",
+                "الرجوع للخلف 🔙",
+                callback_data=f"sel_mat:{main_category_id}:{subcategory_id}:1",  # Go back to material selection page 1
             )
         ],
-        [
-            InlineKeyboardButton(
-                "فيديو 🎥",
-                callback_data=f"send_material:{main_category_id}:{subcategory_id}:{material_number}:video",
-            )
-        ],
+
     ]
 
-    keyboard.append(
-        [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data="traditional_learning")]
-    )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.edit_message_text(
-        "اختر الصيغة:", reply_markup=reply_markup
-    )
+    await update.callback_query.edit_message_text("اختر الصيغة:", reply_markup=reply_markup)
+
 
 
 async def handle_send_material(update: Update, context: CallbackContext):
-    """Sends the material in the requested format."""
+    """Generates and sends the material for the selected question."""
 
     callback_data = update.callback_query.data
-    _, main_category_id, subcategory_id, material_number, format = callback_data.split(
-        ":", 4
-    )
+    query = update.callback_query
+    await query.answer()
+    _, format = callback_data.split(":", 1)
 
-    main_category_name = get_data(
-        "SELECT name FROM main_categories WHERE id = ?", (main_category_id,)
-    )[0][0]
+    material_data = context.user_data.get("material_data")
+    main_category_id = material_data["main_category_id"]
+    subcategory_id = material_data["subcategory_id"]
+    question_id = material_data["question_id"]
 
-    subcategory_name = get_data(
-        "SELECT name FROM subcategories WHERE id = ?", (subcategory_id,)
-    )[0][0]
+    await query.message.reply_text("جاري التحضير... ⏳")
 
-    file_path = get_material_path(
-        main_category_name, subcategory_name, material_number, format
-    )
-
-    if not os.path.exists(file_path):
-        await update.callback_query.answer("عذراً، الملف غير موجود. 😞")
-        return
+    # Here's where you'd implement your file generation logic
+    # based on question_id, main_category_id, subcategory_id, and format
+    # For now, let's just send a placeholder message
 
     if format == "pdf":
-        await context.bot.send_document(
-            chat_id=update.effective_chat.id, document=open(file_path, "rb")
-        )
+        file_path = generate_material_pdf(main_category_id, subcategory_id, question_id)
+        if file_path:
+            with open(file_path, "rb") as f:
+                await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
+        else:
+            await update.callback_query.message.reply_text("حدث خطأ أثناء إنشاء ملف PDF. ⚠️")
     elif format == "video":
-        await context.bot.send_video(
-            chat_id=update.effective_chat.id, video=open(file_path, "rb")
-        )
+        file_path = generate_material_video(main_category_id, subcategory_id, question_id)
+        if file_path:
+            with open(file_path, "rb") as f:
+                await context.bot.send_video(chat_id=update.effective_chat.id, video=f)
+        else:
+            await update.callback_query.message.reply_text("جاري العمل على دعم الفيديو قريبا ⚠️")
     elif format == "text":
-        with open(file_path, "r", encoding="utf-8") as file:
-            text_content = file.read()
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id, text=text_content
-        )
+        text_content = generate_material_text(main_category_id, subcategory_id, question_id)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text_content)
     else:
-        await update.callback_query.answer("صيغة غير مدعومة. 🚫")
+        await update.callback_query.message.reply_text("صيغة غير مدعومة. 🚫")
 
 
 # Dictionary to map handler names to functions (for simple callback data)
@@ -514,5 +509,5 @@ TRADITIONAL_LEARNING_HANDLERS_PATTERNS = {
     r"^sel_mat:(\d+):(\d+)$": handle_material_selection,
     r"^sel_mat:(\d+):(\d+):(\d+)$": handle_material_selection,
     r"^show_format_options:\w+:\w+:\d+$": handle_show_format_options,
-    r"^send_material:\w+:\w+:\d+:(text|pdf|video)$": handle_send_material,
+    r"^send_material:(text|pdf|video)$": handle_send_material,
 }
