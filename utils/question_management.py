@@ -3,12 +3,12 @@ import sqlite3
 import pandas as pd
 
 from config import DATABASE_FILE, EXCEL_FILE_BASHAR, VERBAL_FILE
-from utils import database
+from utils.database import get_data, execute_query
 
 
 def generate_questions_with_categories():
     # Check if data already exists in the table
-    count = database.get_data("SELECT COUNT(*) FROM questions")
+    count = get_data("SELECT COUNT(*) FROM questions")
     print(count)
     if count[0][0] == 0:  # If the table is empty, populate it from Excel
         df = pd.read_excel(
@@ -31,31 +31,31 @@ def generate_questions_with_categories():
             subcategories = row["التصنيفات الفرعية مدققة"].split("،")
 
             # Get or create main category ID
-            database.execute_query(
+            execute_query(
                 "INSERT OR IGNORE INTO main_categories (name) VALUES (?)",
                 (main_category,),
             )
-            main_category_id = database.get_data(
+            main_category_id = get_data(
                 "SELECT id FROM main_categories WHERE name = ?", (main_category,)
             )[0][0]
 
             # Link main category to subcategories
             for subcategory in subcategories:
                 subcategory = subcategory.strip()
-                database.execute_query(
+                execute_query(
                     "INSERT OR IGNORE INTO subcategories (name) VALUES (?)",
                     (subcategory,),
                 )
-                subcategory_id = database.get_data(
+                subcategory_id = get_data(
                     "SELECT id FROM subcategories WHERE name = ?", (subcategory,)
                 )[0][0]
-                database.execute_query(
+                execute_query(
                     "INSERT OR IGNORE INTO main_sub_links (main_category_id, subcategory_id) VALUES (?, ?)",
                     (main_category_id, subcategory_id),
                 )
 
             # Now insert the question with the main_category_id
-            database.execute_query(
+            execute_query(
                 """
                 INSERT INTO questions (correct_answer, question_text, option_a, option_b, option_c, option_d, explanation, main_category_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -79,6 +79,8 @@ def generate_verbal_questions():
     Args:
         excel_file (str): The path to the Excel file.
     """
+    count = get_data("SELECT COUNT(*) FROM questions")
+    print(count)
     df = pd.read_excel(
         VERBAL_FILE,
         usecols=[
@@ -100,16 +102,16 @@ def generate_verbal_questions():
         if str(main_category).lower() == "nan":
             continue
         # Get the main category ID (create if it doesn't exist)
-        database.execute_query(
+        execute_query(
             "INSERT OR IGNORE INTO main_categories (name) VALUES (?)",
             (main_category,),
         )
-        main_category_id = database.get_data(
+        main_category_id = get_data(
             "SELECT id FROM main_categories WHERE name = ?", (main_category,)
         )[0][0]
 
         # Insert the verbal question
-        database.execute_query(
+        execute_query(
             """
             INSERT INTO questions (correct_answer, question_text, option_a, option_b, 
                                     option_c, option_d, explanation, main_category_id, 
@@ -180,7 +182,7 @@ def create_context_files(excel_file, output_dir):
 
 def generate_questions():
     # Check if data already exists in the table
-    count = database.get_data("SELECT COUNT(*) FROM questions")
+    count = get_data("SELECT COUNT(*) FROM questions")
     if count[0][0] == 0:  # If the table is empty, populate it from Excel
         df = pd.read_excel(
             EXCEL_FILE_BASHAR,
@@ -196,7 +198,7 @@ def generate_questions():
         )  # Specify the columns you want to read
 
         for _, row in df.iterrows():
-            database.execute_query(
+            execute_query(
                 """
                 INSERT INTO questions (correct_answer, question_text, option_a, option_b, option_c, option_d, explanation)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -218,9 +220,9 @@ def generate_question():
     generate_verbal_questions()
 
 def get_random_questions(num_questions, question_type):
-    """Retrieves a specified number of random questions from the database."""
+    """Retrieves a specified number of random questions from the """
     # Step 1: Retrieve a random set of questions
-    questions = database.get_data(
+    questions = get_data(
         """
         SELECT * FROM questions 
         WHERE question_type = ?
