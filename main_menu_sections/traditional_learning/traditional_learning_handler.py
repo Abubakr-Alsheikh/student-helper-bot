@@ -2,6 +2,7 @@ import os
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CallbackContext
 from telegram.error import BadRequest
+from config import UNDER_DEVLOPING_MESSAGE
 from utils.category_mangement import (
     get_main_categories_by_subcategory,
     get_material_path,
@@ -13,28 +14,78 @@ from utils.subscription_management import check_subscription
 
 
 async def handle_traditional_learning(update: Update, context: CallbackContext):
-    """Handles the 'التعلم بالطريقة التقليدية' option and displays its sub-menu."""
+    """Handles the 'التعلم بالطريقة التقليدية' option."""
 
     if not await check_subscription(update, context):
         return
+
     context.user_data["current_section"] = "traditional_learning"
+
     keyboard = [
+        [InlineKeyboardButton("لفظي 🗣️", callback_data="traditional_learning:verbal")],
         [
             InlineKeyboardButton(
-                "تصفح حسب التصنيف الرئيسي 🗂️", callback_data="show_main_categories"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "تصفح حسب التصنيف الفرعي 🗂️", callback_data="show_subcategories"
+                "كمي 🔢", callback_data="traditional_learning:quantitative"
             )
         ],
         [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data="go_back")],
     ]
+
     await update.callback_query.edit_message_text(
-        "التعلم بالطريقة التقليدية, اختر طريقة التصفح: 📚",
+        "التعلم بالطريقة التقليدية, اختر نوع السؤال: 📚",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
+
+
+async def handle_traditional_learning_type(update: Update, context: CallbackContext):
+    """Handles the question type selection (verbal/quantitative)."""
+    query = update.callback_query
+    await query.answer()
+    _, question_type = query.data.split(":")
+    context.user_data["question_type"] = question_type
+    if question_type == "quantitative":
+        await query.message.reply_text(UNDER_DEVLOPING_MESSAGE)
+        return  # Stop further processing for quantitative
+
+    if question_type == "verbal":
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "تصفح حسب التصنيف الرئيسي 🗂️", callback_data="show_main_categories"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "الرجوع للخلف 🔙", callback_data="traditional_learning"
+                )
+            ],
+        ]  # Only main category for verbal
+    elif question_type == "quantitative":
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "تصفح حسب التصنيف الرئيسي 🗂️", callback_data="show_main_categories"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "تصفح حسب التصنيف الفرعي 🗂️", callback_data="show_subcategories"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "الرجوع للخلف 🔙", callback_data="traditional_learning"
+                )
+            ],
+        ]
+    else:  # Handle invalid input if needed
+        await query.message.reply_text("Invalid question type selected.")
+        return
+
+    new_text = "اختر طريقة التصفح: 📚" 
+    current_text = update.callback_query.message.text 
+    if new_text != current_text: 
+        await update.callback_query.edit_message_text( new_text, reply_markup=InlineKeyboardMarkup(keyboard) )
 
 
 async def handle_show_main_categories(update: Update, context: CallbackContext):
@@ -384,14 +435,14 @@ async def handle_send_material(update: Update, context: CallbackContext):
 
 
 # Dictionary to map handler names to functions (for simple callback data)
-TRADITIONAL_LEARNING_HANDLERS = {
-    "traditional_learning": handle_traditional_learning,
-    "show_main_categories": handle_show_main_categories,
-    "show_subcategories": handle_show_subcategories,
-}
+TRADITIONAL_LEARNING_HANDLERS = { }
 
 # Dictionary to map patterns to functions (for callback data needing regex)
 TRADITIONAL_LEARNING_HANDLERS_PATTERNS = {
+    r"^traditional_learning$": handle_traditional_learning,
+    r"^traditional_learning:(verbal|quantitative)$": handle_traditional_learning_type,
+    r"^show_main_categories$": handle_show_main_categories,
+    r"^show_subcategories$": handle_show_subcategories,
     r"^s_main_c:(\d+)$": handle_show_main_categories,
     r"^s_sub_c:(\d+)$": handle_show_subcategories,
     r"^s_sub_c:(\d+):(\d+)$": handle_show_subcategories,
