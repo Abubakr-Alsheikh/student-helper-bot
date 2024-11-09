@@ -1,6 +1,7 @@
 import asyncio
 import io
 import datetime
+import platform
 from typing import Tuple
 import uuid
 import logging
@@ -36,7 +37,7 @@ def load_design_options(gender: str):
         return []
 
 
-def process_powerpoint_design(ppt_file, user_name):
+async def process_powerpoint_design(ppt_file, user_name):
     try:
         prs = Presentation(ppt_file)
         for slide in prs.slides:
@@ -48,7 +49,7 @@ def process_powerpoint_design(ppt_file, user_name):
         prs.save(modified_ppt)
 
         image_path = f"temp_{user_name}.png"
-        convert_ppt_to_image(modified_ppt, image_path)
+        await convert_ppt_to_image(modified_ppt, image_path)
 
         os.remove(modified_ppt)
         return image_path
@@ -56,44 +57,57 @@ def process_powerpoint_design(ppt_file, user_name):
         logger.error(f"Error processing PowerPoint design: {e}")
         raise
 
-def convert_ppt_to_image(ppt_file_path, img_path, dpi=300, image_format="png"):
+
+async def convert_ppt_to_image(ppt_file_path, img_path, dpi=300, image_format="png"):
     """
-    Converts a PPTX file to images by first converting it to a PDF, then converting each PDF page to an image.
-    
-    Parameters:
-    - ppt_file_path: Path to the input PPTX file
-    - output_dir: Path to the directory where images will be saved
-    - dpi: DPI setting for converting PDF to images (default is 300)
-    - image_format: Format to save images (default is PNG)
+    Converts a PPTX file to an image.
     """
-    
-    # Step 1: Convert PPTX to PDF using LibreOffice
-    with tempfile.TemporaryDirectory() as temp_dir:
-        pdf_filename = os.path.splitext(os.path.basename(ppt_file_path))[0] + ".pdf"
-        pdf_path = os.path.join(temp_dir, pdf_filename)
-        
-        # Run the LibreOffice command to convert PPTX to PDF
-        result = subprocess.run([
-            "libreoffice", "--headless", "--invisible", "--convert-to", "pdf",
-            "--outdir", temp_dir, ppt_file_path
-        ], check=True)
-        
-        # Check if the PDF was created successfully
-        if not os.path.exists(pdf_path):
-            raise FileNotFoundError("PDF conversion failed.")
-        print(f"Converted PPTX to PDF: {pdf_path}")
-        
-        # Step 2: Convert PDF to images
-        images = convert_from_path(pdf_path, dpi=dpi, fmt=image_format)
-        
-        # Step 3: Save images to the specified output directory
-        for i, img in enumerate(images):
-            img.save(img_path, image_format.upper())
-            break
-        
-        print(f"PDF converted to images. Images saved in {img_path}")
-        
-        return img_path
+    try:
+        # Step 1: Convert PPTX to PDF using LibreOffice asynchronously
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_filename = os.path.splitext(os.path.basename(ppt_file_path))[0] + ".pdf"
+            pdf_path = os.path.join(temp_dir, pdf_filename)
+
+            if platform.system() == "Windows":
+                soffice_path = r"C:\Program Files\LibreOffice\program\soffice"
+            else:
+                soffice_path = "libreoffice"
+            # Run the LibreOffice command asynchronously
+            cmd = [
+                soffice_path,
+                "--headless",
+                "--invisible",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                temp_dir,
+                ppt_file_path,
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0 or not os.path.exists(pdf_path):
+                raise FileNotFoundError(f"PDF conversion failed: {stderr.decode()}")
+
+            if platform.system() == "Windows":
+                # Step 2: Convert PDF to images asynchronously
+                images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format, poppler_path=r"C:\poppler-24.08.0\Library\bin")
+            else:
+                images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format)
+
+
+            # Save the first page as the image for simplicity
+            images[0].save(img_path, image_format.upper())
+
+            return img_path
+
+    except Exception as e:
+        logger.error(f"Error converting PPTX to image: {e}")
+        raise
+
 
 async def download_image(image_url):
     try:

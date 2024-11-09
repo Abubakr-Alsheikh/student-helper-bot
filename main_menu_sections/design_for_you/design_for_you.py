@@ -147,11 +147,7 @@ async def handle_design_selection(update: Update, context):
 
         try:
             await query.edit_message_text("جاري معالجة التصميم... ⚙️")
-            image_path = await asyncio.to_thread(
-                process_powerpoint_design,
-                design_path,
-                update.effective_user.first_name,
-            )
+            image_path = await process_powerpoint_design( design_path, update.effective_user.first_name, )
 
             with open(image_path, "rb") as image_file:
                 await context.bot.send_photo(
