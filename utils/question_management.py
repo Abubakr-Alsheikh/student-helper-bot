@@ -266,7 +266,7 @@ def get_questions_by_category(category_id, num_questions, category_type, questio
             "Invalid category_type. Must be 'main_category_id' or 'sub_category_id'."
         )
     
-    return execute_query(query, (category_id, question_type, num_questions), fetch=True)
+    return execute_query(query, (category_id, question_type, num_questions), fetch_all=True)
 
 
 def get_random_question():
