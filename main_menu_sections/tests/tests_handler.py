@@ -407,7 +407,7 @@ async def start_quiz(update: Update, context: CallbackContext):
         # Retrieve questions based on category type (main or sub)
         questions = get_questions_by_category(
             category_id, num_questions, category_type, context.user_data["quiz_type"]
-        )
+        )[0]
         if not questions:
             logger.error(
                 f"No questions found for category_id: {category_id}, category_type: {category_type}, quiz_type: {context.user_data['quiz_type']}"
@@ -473,6 +473,7 @@ async def send_question(update: Update, context: CallbackContext):
             question_type,
             image_path,
             passage_name,
+            *_,
         ) = question_data
         passage_content = ""
         if passage_name != "-":
