@@ -314,7 +314,7 @@ async def handle_category_choice(update: Update, context: CallbackContext):
                 )
             ],
             [InlineKeyboardButton("الوقت المتاح ⏱️", callback_data="time_limit")],
-            [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data=category_type[:-3])],
+            [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data=f"{category_type[:-3]}")],
         ]
         await update.callback_query.edit_message_text(
             "هل تريدنا أن نقدم لك الاختبار عن طريق سؤالك عددًا معينًا من الأسئلة، أم عن طريق إعطائك اختبارا بمدة زمنية معينة؟ 🤔",
@@ -1017,6 +1017,7 @@ tests_conv_handler = ConversationHandler(
                 handle_number_of_questions_choice, pattern=r"^number_of_questions$"
             ),
             CallbackQueryHandler(handle_time_limit_choice, pattern=r"^time_limit$"),
+            CallbackQueryHandler(handle_category_type_choice, pattern=r"^(main_category|sub_category)$"),
         ],
         GET_NUMBER_OF_QUESTIONS: [
             MessageHandler(
