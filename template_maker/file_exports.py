@@ -82,62 +82,87 @@ def convert_pptx_to_mp4(pptx_path, mp4_path, fps=0.5, dpi=300, image_format="png
     - dpi: DPI setting for converting PDF to images
     - image_format: Format to save images (default is PNG)
     """
+    if platform.system() == "Windows":
+        import win32com.client
+        import time
+        import os
+        ppSaveAsWMV = 37
+        ppt = win32com.client.Dispatch('PowerPoint.Application')
+        presentation = ppt.Presentations.Open(pptx_path,WithWindow=False)
+        presentation.CreateVideo(mp4_path,-1,4,1080,24,60)
+        start_time_stamp = time.time()
+        while True:
+            time.sleep(4)
+            try:
+                os.rename(mp4_path,mp4_path)
+                print('success')
+                break
+            except Exception:
+                pass
+        end_time_stamp=time.time()
+        print(end_time_stamp-start_time_stamp)
+        ppt.Quit()
+        pass
+    else:
+        # Step 1: Convert PPTX to PDF using LibreOffice
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_filename = os.path.splitext(os.path.basename(pptx_path))[0] + ".pdf"
+            pdf_path = os.path.join(temp_dir, pdf_filename)
 
-    # Step 1: Convert PPTX to PDF using LibreOffice
-    with tempfile.TemporaryDirectory() as temp_dir:
-        pdf_filename = os.path.splitext(os.path.basename(pptx_path))[0] + ".pdf"
-        pdf_path = os.path.join(temp_dir, pdf_filename)
-
-        # Run the LibreOffice command to convert PPTX to PDF
-        result = subprocess.run(
-            [
-                "libreoffice",
-                "--headless",
-                "--invisible",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                temp_dir,
-                pptx_path,
-            ],
-            check=True,
-        )
-
-        # Check if the PDF was created successfully
-        if not os.path.exists(pdf_path):
-            raise FileNotFoundError("PDF conversion failed.")
-        print(f"Converted PPTX to PDF: {pdf_path}")
-
-        # Step 2: Convert PDF to images
-        images = convert_from_path(pdf_path, dpi=dpi, fmt=image_format)
-
-        # Step 3: Save images to temporary files
-        image_paths = []
-        for i, img in enumerate(images):
-            img_path = os.path.join(
-                temp_dir, f"page_{str(i + 1).zfill(3)}.{image_format}"
+            if platform.system() == "Windows":
+                soffice_path = r"C:\Program Files\LibreOffice\program\soffice"
+            else:
+                soffice_path = "libreoffice"
+            # Run the LibreOffice command to convert PPTX to PDF
+            result = subprocess.run(
+                [
+                    soffice_path,
+                    "--headless",
+                    "--invisible",
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    temp_dir,
+                    pptx_path,
+                ],
+                check=True,
             )
-            img.save(img_path, image_format.upper())
-            image_paths.append(img_path)
 
-        print(f"PDF converted to images: {len(image_paths)} images generated.")
+            # Check if the PDF was created successfully
+            if not os.path.exists(pdf_path):
+                raise FileNotFoundError("PDF conversion failed.")
+            print(f"Converted PPTX to PDF: {pdf_path}")
 
-        # Step 4: Create video from images
-        # Load first image to get frame dimensions
-        frame = cv2.imread(image_paths[0])
-        height, width, layers = frame.shape
+            # Step 2: Convert PDF to images
+            images = convert_from_path(pdf_path, dpi=dpi, fmt=image_format)
 
-        # Define the video codec and create VideoWriter object
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Codec for mp4
-        video = cv2.VideoWriter(mp4_path, fourcc, fps, (width, height))
+            # Step 3: Save images to temporary files
+            image_paths = []
+            for i, img in enumerate(images):
+                img_path = os.path.join(
+                    temp_dir, f"page_{str(i + 1).zfill(3)}.{image_format}"
+                )
+                img.save(img_path, image_format.upper())
+                image_paths.append(img_path)
 
-        # Add each image to the video
-        for img_path in image_paths:
-            frame = cv2.imread(img_path)
-            video.write(frame)  # Write each image as a frame
+            print(f"PDF converted to images: {len(image_paths)} images generated.")
 
-        # Release the video writer
-        video.release()
-        print(f"Video saved as {mp4_path}")
+            # Step 4: Create video from images
+            # Load first image to get frame dimensions
+            frame = cv2.imread(image_paths[0])
+            height, width, layers = frame.shape
 
-    # Temporary files (PDF and images) are automatically deleted with temp_dir
+            # Define the video codec and create VideoWriter object
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Codec for mp4
+            video = cv2.VideoWriter(mp4_path, fourcc, fps, (width, height))
+
+            # Add each image to the video
+            for img_path in image_paths:
+                frame = cv2.imread(img_path)
+                video.write(frame)  # Write each image as a frame
+
+            # Release the video writer
+            video.release()
+            print(f"Video saved as {mp4_path}")
+
+        # Temporary files (PDF and images) are automatically deleted with temp_dir
