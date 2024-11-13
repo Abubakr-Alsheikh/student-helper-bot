@@ -19,9 +19,8 @@ from telegram.ext import (
 from config import CONTEXT_DIRECTORY, UNDER_DEVLOPING_MESSAGE
 from handlers.main_menu_handler import main_menu_handler
 from handlers.personal_assistant_chat_handler import chatgpt, SYSTEM_MESSAGE
-from main_menu_sections.level_determination.pdf_generator import (
-    generate_quiz_pdf,
-)
+from template_maker.generate_files import generate_quiz_pdf, generate_quiz_video
+from utils import database
 from utils.database import (
     execute_query,
     get_data,
@@ -300,17 +299,16 @@ async def send_question(update: Update, context: CallbackContext):
         reply_markup = InlineKeyboardMarkup(keyboard)
         if current_question_index == 0:
             await update.effective_message.reply_text(
-                f"{passage_text}" f"{current_question_index+1}. {question_text}",
+                f"{passage_text}" f"*{current_question_index+1}.* {question_text}",
                 reply_markup=reply_markup,
             )
         else:
             await update.effective_message.edit_text(
-                f"{passage_text}" f"{current_question_index+1}. {question_text}",
+                f"{passage_text}" f"*{current_question_index+1}.* {question_text}",
                 reply_markup=reply_markup,
             )
     else:
         await end_quiz(update, context)
-        await handle_final_step(update, context)
         return ConversationHandler.END
 
 
@@ -321,7 +319,6 @@ async def handle_answer(update: Update, context: CallbackContext):
         and datetime.now() > context.user_data["end_time"]
     ):
         await end_quiz(update, context)
-        await handle_final_step(update, context)
         return
 
     query = update.callback_query
@@ -422,112 +419,94 @@ def get_option_text(question_data, correct_answer):
 
 async def end_quiz(update: Update, context: CallbackContext):
     """Calculates the score and ends the quiz."""
-    end_time = datetime.now()
-    start_time = context.user_data["start_time"]
-    total_time = (end_time - start_time).total_seconds()
-    score = context.user_data["score"]
-    total_questions = len(context.user_data["questions"])
-    questions = context.user_data["questions"]
-    user_id = update.effective_user.id
+    try:
+        end_time = datetime.now()
+        start_time = context.user_data["start_time"]
+        total_time = (end_time - start_time).total_seconds()
+        score = context.user_data["score"]
+        total_questions = len(context.user_data["questions"])
+        questions = context.user_data["questions"]
+        user_id = update.effective_user.id
 
-    level_determination_id = context.user_data["level_determination_id"]
 
-    if (
-        "end_time" in context.user_data
-        and datetime.now() > context.user_data["end_time"]
-    ):
-        await update.effective_message.reply_text("لقد انتهى وقتك. ⏱️")
+        if (
+            "end_time" in context.user_data
+            and datetime.now() > context.user_data["end_time"]
+        ):
+            await update.effective_message.reply_text("لقد انتهى وقتك. ⏱️")
 
-    message = await update.effective_message.edit_text(
-        "انتظر قليلا حتى يتم تحليل الاجابتات التي قمت بأختيارها... ⏳",
-        parse_mode="Markdown",
-    )
-
-    update_user_usage_time(user_id, total_time)
-    update_user_created_questions(user_id, total_questions)
-    percentage_expected = calculate_percentage_expected(score, total_questions)
-    update_user_percentage_expected(user_id, percentage_expected)
-    points_earned = calculate_points(total_time, score, total_questions)
-    update_user_points(user_id, points_earned)
-
-    percentage = calculate_percentage_expected(score, total_questions)
-
-    # Prepare data for analysis
-    quiz_data = []
-    for i, question_data in enumerate(questions):
-        question_id = question_data[0]
-        question_text = question_data[2]
-        correct_answer = question_data[1]
-        user_answer = context.user_data["answers"][i]
-        is_correct = context.user_data["results"][i]
-
-        # Fetch category and question type from the database
-        category_name, question_type = await get_question_category_and_type(question_id)
-
-        quiz_data.append(
-            {
-                "question_text": question_text,
-                "correct_answer": correct_answer,
-                "user_answer": user_answer,
-                "is_correct": is_correct,
-                "category": category_name,
-                "question_type": question_type,
-            }
+        message = await update.effective_message.edit_text(
+            "انتظر قليلا حتى يتم تحليل الاجابتات التي قمت بأختيارها... ⏳",
+            parse_mode="Markdown",
         )
 
-    # Call the function to generate personalized feedback
-    feedback_text = await generate_feedback_with_chatgpt(
-        user_id,
-        quiz_data,
-        score,
-        total_questions,
-        total_time,
-        update=update,
-        context=context,
-    )
-
-    await message.edit_text(
-        f"*انتهت الأسئلة!* 🎉\n"
-        f"لقد ربحت *{points_earned}* نقطة! 🏆\n"
-        f"لقد حصلت على *{score}* من *{total_questions}* 👏\n"
-        f"لقد استغرقت *{int(total_time // 60)}* دقيقة و*{int(total_time % 60)}* ثانية. ⏱️\n"
-        f"*إليك بعض الملاحظات حول مستواك وطرق التحسين:*\n{feedback_text}",
-        parse_mode="Markdown",
-    )
-
-    await update.effective_message.reply_text("انتظر قليلا جاري إنشاء ملف pdf... 📄")
+        # Update user's total usage time in the database
+        update_user_usage_time(user_id, total_time)
+        update_user_created_questions(user_id, total_questions)
+        percentage_expected = calculate_percentage_expected(score, total_questions)
+        update_user_percentage_expected(user_id, percentage_expected)
+        points_earned = calculate_points(total_time, score, total_questions)
+        update_user_points(user_id, points_earned)
 
 
-    pdf_filepath = await generate_quiz_pdf(questions, user_id)
+        # Prepare data for analysis
+        quiz_data = []
+        for i, question_data in enumerate(questions):
+            question_id = question_data[0]
+            question_text = question_data[2]
+            correct_answer = question_data[1]
+            user_answer = context.user_data["answers"][i]
+            is_correct = context.user_data["results"][i]
 
-    if pdf_filepath is None:  # Check if PDF generation failed
-        await update.effective_message.reply_text("حدث خطأ أثناء إنشاء ملف PDF. ⚠️")
+            # Fetch category and question type from the database
+            category_name, question_type = await get_question_category_and_type(question_id)
 
-    try:
-        execute_query(
-            """
-            UPDATE level_determinations
-            SET percentage = ?, time_taken = ?, pdf_path = ?
-            WHERE id = ?
-            """,
-            (percentage, total_time, pdf_filepath, level_determination_id),
+            quiz_data.append(
+                {
+                    "question_text": question_text,
+                    "correct_answer": correct_answer,
+                    "user_answer": user_answer,
+                    "is_correct": is_correct,
+                    "category": category_name,
+                    "question_type": question_type,
+                }
+            )
+
+        # Call the function to generate personalized feedback
+        feedback_text = await generate_feedback_with_chatgpt(
+            user_id,
+            quiz_data,
+            score,
+            total_questions,
+            total_time,
+            update=update,
+            context=context,
+        )
+
+        await message.edit_text(
+            f"*انتهت الأسئلة!* 🎉\n"
+            f"لقد ربحت *{points_earned}* نقطة! 🏆\n"
+            f"لقد حصلت على *{score}* من *{total_questions}* 👏\n"
+            f"لقد استغرقت *{int(total_time // 60)}* دقيقة و*{int(total_time % 60)}* ثانية. ⏱️\n"
+            f"*إليك بعض الملاحظات حول مستواك وطرق التحسين:*\n{feedback_text}",
+            parse_mode="Markdown",
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("PDF 📄", callback_data="output_format_level:pdf"),
+                InlineKeyboardButton(
+                    "فيديو 🎬 (تحت التطوير)", callback_data="output_format_level:video"
+                ),
+            ],
+        ]
+        await update.effective_message.reply_text(
+            "اختر صيغة الملف النهائي:", reply_markup=InlineKeyboardMarkup(keyboard)
         )
     except Exception as e:
-        logger.error(f"Error updating level determination in database: {e}")
-        # Handle the error, e.g., log and potentially inform the user
-
-    # Check if pdf_filepath is valid before trying to open it
-    if pdf_filepath and os.path.exists(pdf_filepath):
-        with open(pdf_filepath, "rb") as f:
-            await context.bot.send_document(
-                chat_id=update.effective_chat.id, document=f
+            logger.error(f"Error in end_quiz: {e}")
+            await update.effective_message.reply_text(
+                "حدث خطأ أثناء إنهاء تحديد السمتوى، يرجى المحاولة مرة أخرى."
             )
-    else:
-        logger.error("PDF file path is None or file does not exist.")
-        await update.effective_message.reply_text("تعذر العثور على ملف PDF. ⚠️")
-
-    return ConversationHandler.END
-
 
 async def get_question_category_and_type(question_id: int):
     """Fetches the category name and question type for a given question."""
@@ -599,6 +578,97 @@ async def generate_feedback_with_chatgpt(
     except Exception as e:
         logger.error(f"Error generating feedback with ChatGPT: {e}")
         return "حدث خطأ أثناء الحصول على تحليل الأداء. ⚠️"
+
+
+async def handle_output_format_choice(update: Update, context: CallbackContext):
+    """Handles the user's choice of output format."""
+    query = update.callback_query
+    await query.answer()
+    _, output_format = query.data.split(":")
+
+    end_time = datetime.now()
+    start_time = context.user_data["start_time"]
+    total_time = (end_time - start_time).total_seconds()
+    total_questions = len(context.user_data["questions"])
+    score = context.user_data["score"]
+    percentage = calculate_percentage_expected(score, total_questions)
+
+    questions = context.user_data["questions"]
+    user_id = update.effective_user.id
+    level_determination_id = context.user_data["level_determination_id"]
+
+    pdf_filepath = None
+    video_filepath = None
+
+    if output_format == "pdf":
+        await update.effective_message.reply_text(
+            "انتظر قليلا جاري إنشاء ملف pdf... 📄"
+        )
+
+        pdf_filepath = await generate_quiz_pdf(
+            questions, user_id, "level_determination"
+        )
+
+        if pdf_filepath is None:  # Check if PDF generation failed
+            await update.effective_message.reply_text("حدث خطأ أثناء إنشاء ملف PDF. ⚠️")
+
+        # Check if pdf_filepath is valid before trying to open it
+        if pdf_filepath and os.path.exists(pdf_filepath):
+            with open(pdf_filepath, "rb") as f:
+                await context.bot.send_document(
+                    chat_id=update.effective_chat.id, document=f
+                )
+        else:
+            logger.error("PDF file path is None or file does not exist.")
+            await update.effective_message.reply_text("تعذر العثور على ملف PDF. ⚠️")
+
+    elif output_format == "video":  # Future implementation
+        await update.effective_message.reply_text("جاري إنشاء الفيديو... 🎬")
+        video_filepath = await generate_quiz_video(
+            questions, user_id, "level_determination"
+        )
+
+        if (
+            video_filepath
+        ):  # If video generation was successful (check the actual return)
+            try:
+                with open(video_filepath, "rb") as f:
+                    await context.bot.send_video(
+                        chat_id=update.effective_chat.id, video=f
+                    )
+
+            except FileNotFoundError:
+                logger.error(f"Video file not found at path: {video_filepath}")
+                await update.effective_message.reply_text(
+                    "عذراً، لم يتم العثور على ملف الفيديو."
+                )
+
+            except Exception as e:
+                logger.error(f"Error sending video: {e}")
+                await update.effective_message.reply_text(
+                    "حدث خطأ أثناء إرسال الفيديو."
+                )
+
+        else:
+            await update.effective_message.reply_text(
+                "حدث خطأ أثناء إنشاء الفيديو."
+            )  # Video generation failed.
+    try:
+        # Update the previous_tests entry
+        database.execute_query(
+            """
+            UPDATE level_determinations
+            SET percentage = ?, time_taken = ?, pdf_path = ?, video_path = ?
+            WHERE id = ?
+            """,
+            (percentage, total_time, pdf_filepath, video_filepath, level_determination_id),
+        )
+
+    except Exception as e:
+        logger.error(f"Error updating level determination in database: {e}")
+
+    await handle_final_step(update, context)  # Continue to the AI assistance step
+    return ConversationHandler.END
 
 
 async def handle_final_step(update: Update, context: CallbackContext):
@@ -817,6 +887,7 @@ LEVEL_DETERMINATION_HANDLERS = {
 }
 
 LEVEL_DETERMINATION_HANDLERS_PATTERN = {
+    r"^output_format_level:.+$": handle_output_format_choice,
     r"^show_level_details_.+$": show_level_details,
     r"^download_pdf_.+$": download_pdf,
 }

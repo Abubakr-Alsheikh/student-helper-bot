@@ -145,6 +145,7 @@ def create_tables(update: Update = None, context: CallbackContext = None):
             percentage REAL,
             time_taken REAL,
             pdf_path TEXT,
+            video_path TEXT,
             FOREIGN KEY (user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
         )
     """

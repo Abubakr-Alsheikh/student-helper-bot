@@ -45,7 +45,7 @@ async def generate_quiz_pdf(questions, user_id, which_quiz, category_name=None) 
             else:
                 category = database.get_data(
                     "SELECT name FROM main_categories WHERE id = ?", (main_category_id,)
-                )
+                )[0][0]
 
             quiz_data.append(
                 {
