@@ -107,5 +107,3 @@ def generate_material_text(main_category_id, subcategory_id, question_id):
 {explanation}
 """
     return plain_text
-
-asyncio.run(generate_material_pdf(55, 34, 11))
