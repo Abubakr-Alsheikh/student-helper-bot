@@ -280,38 +280,3 @@ def get_question_by_id(question_id):
     if result is not None and result:
         return dict(zip((col[0] for col in description), result))
     return None
-
-def update_learning_progress(user_id, question_id, answered_correctly):
-    query = """
-        INSERT INTO learning_progress (user_id, question_id, answered_correctly)
-        VALUES (?, ?, ?)
-    """
-    execute_query(query, (user_id, question_id, answered_correctly))
-
-
-def get_user_questions_for_review(user_id):
-    query = """
-        SELECT q.question_text, q.correct_answer, lp.answered_correctly
-        FROM questions q
-        JOIN learning_progress lp ON q.id = lp.question_id
-        WHERE lp.user_id = ?
-    """
-    return get_data(query, (user_id,))
-
-def format_question_for_chatgpt(question_data):
-    return (
-        f"Question: {question_data['question_text']}\n"
-        f"A: {question_data['option_a']}\n"
-        f"B: {question_data['option_b']}\n"
-        f"C: {question_data['option_c']}\n"
-        f"D: {question_data['option_d']}\n"
-    )
-
-def format_question_for_user(question_data):
-    return (
-        f"{question_data['question_text']}\n\n"
-        f"أ: {question_data['option_a']}\n"
-        f"ب: {question_data['option_b']}\n"
-        f"ج: {question_data['option_c']}\n"
-        f"د: {question_data['option_d']}"
-    )
