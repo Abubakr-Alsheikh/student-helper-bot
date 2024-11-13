@@ -4,9 +4,6 @@ import asyncio
 import sys
 from typing import Callable, Dict, Optional
 
-
-
-
 class CommandManager:
     def __init__(self):
         self.commands: Dict[str, Callable] = {}
@@ -170,6 +167,10 @@ def setup_generate_questions_from_chatgpt_args(parser):
 
 
 def initbot(args):
+    import os
+    from config import DATABASE_FILE
+
+    os.remove(DATABASE_FILE)
     create_db(args)
     generate_verbal_questions(args)
     create_context_files_command(args)
