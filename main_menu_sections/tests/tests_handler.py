@@ -19,7 +19,7 @@ from telegram.ext import (
 from config import CONTEXT_DIRECTORY, UNDER_DEVLOPING_MESSAGE
 from handlers.main_menu_handler import main_menu_handler
 from handlers.personal_assistant_chat_handler import chatgpt, SYSTEM_MESSAGE
-from main_menu_sections.tests.pdf_generator import generate_quiz_pdf
+from template_maker.generate_files import generate_quiz_pdf, generate_quiz_video
 from utils import database
 from utils.question_management import get_passage_content, get_questions_by_category
 from utils.subscription_management import check_subscription
@@ -314,7 +314,11 @@ async def handle_category_choice(update: Update, context: CallbackContext):
                 )
             ],
             [InlineKeyboardButton("الوقت المتاح ⏱️", callback_data="time_limit")],
-            [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data=f"{category_type[:-3]}")],
+            [
+                InlineKeyboardButton(
+                    "الرجوع للخلف 🔙", callback_data=f"{category_type[:-3]}"
+                )
+            ],
         ]
         await update.callback_query.edit_message_text(
             "هل تريدنا أن نقدم لك الاختبار عن طريق سؤالك عددًا معينًا من الأسئلة، أم عن طريق إعطائك اختبارا بمدة زمنية معينة؟ 🤔",
@@ -517,7 +521,6 @@ async def send_question(update: Update, context: CallbackContext):
             )
     else:
         await end_quiz(update, context)
-        await handle_final_step(update, context)
         return ConversationHandler.END
 
 
@@ -529,7 +532,6 @@ async def handle_answer(update: Update, context: CallbackContext):
         and datetime.now() > context.user_data["end_time"]
     ):
         await end_quiz(update, context)
-        await handle_final_step(update, context)
         return
 
     query = update.callback_query
@@ -569,7 +571,6 @@ async def handle_answer(update: Update, context: CallbackContext):
         is_correct,
         previous_test_id,
     )
-
 
     if is_correct:
         context.user_data["score"] += 1
@@ -639,13 +640,10 @@ async def end_quiz(update: Update, context: CallbackContext):
     try:
         end_time = datetime.now()
         start_time = context.user_data["start_time"]
-        total_time = (end_time - start_time).total_seconds()  # Time in seconds
+        total_time = (end_time - start_time).total_seconds()
         score = context.user_data["score"]
         total_questions = len(context.user_data["questions"])
-
-        questions = context.user_data["questions"]
         user_id = update.effective_user.id
-        previous_test_id = context.user_data["previous_test_id"]
 
         # Update user's total usage time in the database
         update_user_usage_time(user_id, total_time)
@@ -669,48 +667,73 @@ async def end_quiz(update: Update, context: CallbackContext):
             f"لقد حصلت على {score} من {total_questions} 👏\n"
             f"لقد استغرقت {int(total_time // 60)} دقيقة و{int(total_time % 60)} ثانية. ⏱️"
         )
+        keyboard = [
+            [
+                InlineKeyboardButton("PDF 📄", callback_data="output_format_tests:pdf"),
+                InlineKeyboardButton(
+                    "فيديو 🎬 (تحت التطوير)", callback_data="output_format_tests:video"
+                ),
+            ],
+        ]
+        await update.effective_message.reply_text(
+            "اختر صيغة الملف النهائي:", reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    except Exception as e:
+        logger.error(f"Error in end_quiz: {e}")
+        await update.effective_message.reply_text(
+            "حدث خطأ أثناء إنهاء الاختبار، يرجى المحاولة مرة أخرى."
+        )
+
+
+async def handle_output_format_choice(update: Update, context: CallbackContext):
+    """Handles the user's choice of output format."""
+    query = update.callback_query
+    await query.answer()
+    _, output_format = query.data.split(":")
+
+    end_time = datetime.now()
+    start_time = context.user_data["start_time"]
+    total_time = (end_time - start_time).total_seconds()
+    score = context.user_data["score"]
+
+    questions = context.user_data["questions"]
+    user_id = update.effective_user.id
+    previous_test_id = context.user_data["previous_test_id"]
+
+    category_id = context.user_data["category_id"]
+    category_type = context.user_data["category_type"]
+
+    if category_type == "main_category_id":
+        category_name = database.get_data(
+            "SELECT name FROM main_categories WHERE id = ?", (category_id,)
+        )[0][
+            0
+        ]  # Access the first element of the tuple and then the first element of the list
+    elif category_type == "sub_category_id":
+        category_name = database.get_data(
+            "SELECT name FROM subcategories WHERE id = ?", (category_id,)
+        )[0][
+            0
+        ]  # Access the first element of the tuple and then the first element of the list
+    else:
+        logger.error(f"Invalid category_type: {category_type}")
+        category_name = "غير محدد"
+
+    pdf_filepath = None
+    video_filepath = None
+
+    if output_format == "pdf":
         await update.effective_message.reply_text(
             "انتظر قليلا جاري إنشاء ملف pdf... 📄"
         )
 
-        category_id = context.user_data["category_id"]
-        category_type = context.user_data["category_type"]
-
-        if category_type == "main_category_id":
-            category_name = database.get_data(
-                "SELECT name FROM main_categories WHERE id = ?", (category_id,)
-            )[0][
-                0
-            ]  # Access the first element of the tuple and then the first element of the list
-        elif category_type == "sub_category_id":
-            category_name = database.get_data(
-                "SELECT name FROM subcategories WHERE id = ?", (category_id,)
-            )[0][
-                0
-            ]  # Access the first element of the tuple and then the first element of the list
-        else:
-            logger.error(f"Invalid category_type: {category_type}")
-            category_name = "غير محدد"
-
-        pdf_filepath = await generate_quiz_pdf(questions, user_id, category_name)
+        pdf_filepath = await generate_quiz_pdf(
+            questions, user_id, "tests", category_name
+        )
 
         if pdf_filepath is None:  # Check if PDF generation failed
             await update.effective_message.reply_text("حدث خطأ أثناء إنشاء ملف PDF. ⚠️")
 
-        try:
-            # Update the previous_tests entry using database function
-            database.execute_query(
-                """
-                UPDATE previous_tests
-                SET score = ?, time_taken = ?, pdf_path = ?
-                WHERE id = ?
-                """,
-                (score, total_time, pdf_filepath, previous_test_id),
-            )
-
-        except Exception as e:
-            logger.error(f"Error updating level determination in database: {e}")
-        
         # Check if pdf_filepath is valid before trying to open it
         if pdf_filepath and os.path.exists(pdf_filepath):
             with open(pdf_filepath, "rb") as f:
@@ -721,12 +744,54 @@ async def end_quiz(update: Update, context: CallbackContext):
             logger.error("PDF file path is None or file does not exist.")
             await update.effective_message.reply_text("تعذر العثور على ملف PDF. ⚠️")
 
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"Error in end_quiz: {e}")
-        await update.effective_message.reply_text(
-            "حدث خطأ أثناء إنهاء الاختبار، يرجى المحاولة مرة أخرى."
+    elif output_format == "video":  # Future implementation
+        await update.effective_message.reply_text("جاري إنشاء الفيديو... 🎬")
+        video_filepath = await generate_quiz_video(
+            questions, user_id, "tests", category_name
         )
+
+        if (
+            video_filepath
+        ):  # If video generation was successful (check the actual return)
+            try:
+                with open(video_filepath, "rb") as f:
+                    await context.bot.send_video(
+                        chat_id=update.effective_chat.id, video=f
+                    )
+
+            except FileNotFoundError:
+                logger.error(f"Video file not found at path: {video_filepath}")
+                await update.effective_message.reply_text(
+                    "عذراً، لم يتم العثور على ملف الفيديو."
+                )
+
+            except Exception as e:
+                logger.error(f"Error sending video: {e}")
+                await update.effective_message.reply_text(
+                    "حدث خطأ أثناء إرسال الفيديو."
+                )
+
+        else:
+            await update.effective_message.reply_text(
+                "حدث خطأ أثناء إنشاء الفيديو."
+            )  # Video generation failed.
+    try:
+        # Update the previous_tests entry
+        database.execute_query(
+            """
+            UPDATE previous_tests
+            SET score = ?, time_taken = ?, pdf_path = ?, video_path = ?
+            WHERE id = ?
+            """,
+            (score, total_time, pdf_filepath, video_filepath, previous_test_id),
+        )
+
+    except Exception as e:
+        logger.error(f"Error updating level determination in database: {e}")
+
+    await handle_final_step(update, context)  # Continue to the AI assistance step
+    return ConversationHandler.END
+
 
 async def handle_final_step(update: Update, context: CallbackContext):
     """Handles the final step (asking about AI assistance)."""
@@ -935,6 +1000,7 @@ TESTS_HANDLERS = {
 }
 
 TESTS_HANDLERS_PATTERN = {
+    r"^output_format_tests:.+$": handle_output_format_choice,
     r"^download_pdf:.+$": download_test_pdf,
     r"^main_category_page:\d+$": lambda update, context: handle_show_main_categories(
         update, context, int(update.callback_query.data.split(":")[1])
@@ -984,7 +1050,9 @@ tests_conv_handler = ConversationHandler(
                 handle_number_of_questions_choice, pattern=r"^number_of_questions$"
             ),
             CallbackQueryHandler(handle_time_limit_choice, pattern=r"^time_limit$"),
-            CallbackQueryHandler(handle_category_type_choice, pattern=r"^(main_category|sub_category)$"),
+            CallbackQueryHandler(
+                handle_category_type_choice, pattern=r"^(main_category|sub_category)$"
+            ),
         ],
         GET_NUMBER_OF_QUESTIONS: [
             MessageHandler(

@@ -195,7 +195,7 @@ def create_tables(update: Update = None, context: CallbackContext = None):
             score INTEGER,
             time_taken REAL,
             pdf_path TEXT,
-            answers_path TEXT,
+            video_path TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """
