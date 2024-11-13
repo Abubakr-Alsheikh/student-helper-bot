@@ -728,39 +728,6 @@ async def end_quiz(update: Update, context: CallbackContext):
             "حدث خطأ أثناء إنهاء الاختبار، يرجى المحاولة مرة أخرى."
         )
 
-async def store_test_data(
-    update: Update, context: CallbackContext, total_time: float, score: int
-):
-    """Stores the test data in the database."""
-    user_id = update.effective_user.id
-    num_questions = context.user_data["num_questions"]
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    test_number = len(os.listdir(f"user_tests/{user_id}")) + 1
-
-    filepath = f"user_tests/{user_id}/{test_number}_{timestamp}.pdf"
-    answers_path = f"user_tests/{user_id}/{test_number}_{timestamp}.txt"
-    try:
-        database.execute_query(
-            """
-            INSERT INTO previous_tests (user_id, timestamp, num_questions, score, time_taken, pdf_path, answers_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                user_id,
-                timestamp,
-                num_questions,
-                score,
-                total_time,
-                filepath,
-                answers_path,
-            ),
-        )
-    except Exception as e:
-        logger.error(
-            f"Error storing test data for user_id: {user_id}, test_number: {test_number}: {e}"
-        )
-
-
 async def handle_final_step(update: Update, context: CallbackContext):
     """Handles the final step (asking about AI assistance)."""
     keyboard = [
