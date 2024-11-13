@@ -73,14 +73,14 @@ class ChatGPT:
 
             assistant_response = await self.generate_response(messages, **kwargs)
 
-            if return_as_text:
-                return assistant_response
-
             messages.append({"role": "assistant", "content": assistant_response})
+            context.user_data["messages"] = messages
 
             if save_history:
                 await self.save_chat_history(user_id, messages)
-            context.user_data["messages"] = messages
+
+            if return_as_text:
+                return assistant_response
 
             if use_response_mode:
                 response_mode = await get_user_setting(user_id, "voice_written")
