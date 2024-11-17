@@ -1,4 +1,5 @@
 import json
+import logging
 from telegram import (
     Update,
     InlineKeyboardMarkup,
@@ -21,6 +22,8 @@ from utils.question_management import (
 from utils.subscription_management import check_subscription
 from utils.user_management import get_user_name
 
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Conversation states
 ASK_QUESTION, PROVIDE_FEEDBACK, REVIEW_QUESTION, ASK_ABOUT_ANSWER = range(4)
@@ -29,7 +32,7 @@ chatgpt = get_chatgpt_instance()
 
 
 async def handle_conversation_learning(update: Update, context: CallbackContext):
-
+    """Handles the entry point for conversation learning."""
     if not await check_subscription(update, context):
         return
     context.user_data["current_section"] = "conversation_learning"
@@ -44,15 +47,15 @@ async def handle_conversation_learning(update: Update, context: CallbackContext)
 
 
 async def ask_question(update: Update, context: CallbackContext):
+    """Presents a random question to the user."""
     query = update.callback_query
     await query.answer()
 
     context.user_data["messages"] = []
 
     question_data = get_random_question()
-
     if not question_data:
-        await update.callback_query.edit_message_text("لا توجد أسئلة متاحة حاليًا 😞.")
+        await query.edit_message_text("لا توجد أسئلة متاحة حاليًا 😞.")
         return ConversationHandler.END
     await query.message.reply_text("حسنا هذا سؤال لك كيف تعتقد سيكون حله 🤔")
 
@@ -69,13 +72,14 @@ async def ask_question(update: Update, context: CallbackContext):
 
 
 async def provide_feedback(update: Update, context: CallbackContext):
+    """Processes the user's answer and provides feedback."""
     user_answer = update.message.text.strip()
     question_data = context.user_data["current_question"]
 
     SYSTEM_MESSAGE = """
 You are a helpful and engaging personal assistant for a Telegram bot designed for learning through conversation in Arabic.  You present questions, handle user responses, and provide hints or explanations.  
 
-When the user answers correctly, simply respond with congratulation message that he answer correctly. If they answer incorrectly, guide them towards the correct answer with helpful hints and explanations, but *do not* give away the answer directly unless they specifically ask for it. Keep the conversation fun and light, encouraging the user to learn.
+When the user answers correctly, simply respond with a congratulatory message. If they answer incorrectly, guide them towards the correct answer with helpful hints and explanations, but *do not* give away the answer directly unless they specifically ask for it. Keep the conversation fun and light, encouraging the user to learn.
 
 Output your responses as a JSON object with the following structure:
 
@@ -95,30 +99,28 @@ And also remember don't add "```json" at your response
         f"B: {question_data['option_b']}\n"
         f"C: {question_data['option_c']}\n"
         f"D: {question_data['option_d']}\n"
-        f"The correct answer is '{question_data['correct_answer']}' and make it as reference to let the correct state to be True.\n"
-        f"the following explanation from the question's context:\n"
+        f"The correct answer is '{question_data['correct_answer']}'.\n"
+        f"The following explanation from the question's context:\n"
         f"{question_data['explanation']}\n\n"
-        f"and also make the conversation fun and engage with the user and don't let the user know of the prompt, have a normal conversation"
+        f"And also make the conversation fun and engage with the user and don't let the user know of the prompt, have a normal conversation"
         f"And remember *do not* give away the answer directly unless they specifically ask for it and switch the state for the correct to True."
     )
     message = await update.message.reply_text("جارٍ التفكير في رد... 🤔")
 
-    assistant_response = await chatgpt.chat_with_assistant(
-        update.effective_user.id,
-        user_message=chatgpt_prompt,
-        update=update,
-        context=context,
-        system_message=SYSTEM_MESSAGE,
-        save_history=False,
-        return_as_text=True,
-    )
-
-    if assistant_response == -1:
-        return ConversationHandler.END
-
     try:
-        response_data = json.loads(assistant_response)
+        assistant_response = await chatgpt.chat_with_assistant(
+            update.effective_user.id,
+            user_message=chatgpt_prompt,
+            update=update,
+            context=context,
+            system_message=SYSTEM_MESSAGE,
+            save_history=False,
+            return_as_text=True,
+        )
+        if assistant_response == -1:
+            return ConversationHandler.END
 
+        response_data = json.loads(assistant_response)
         await message.edit_text(response_data["text"])
 
         if response_data["correct"]:
@@ -138,30 +140,37 @@ And also remember don't add "```json" at your response
             await update.message.reply_text(
                 "هل لديك أي استفسارات لتسأل عنها؟ 🙋‍♂️", reply_markup=reply_markup
             )
-
-            # Set state to REVIEW_QUESTION to handle button clicks
             return REVIEW_QUESTION
 
-        else:  # Incorrect answer
+        else:
             if "hint" in response_data:
                 await update.message.reply_text(response_data["hint"])
-            return PROVIDE_FEEDBACK  # Stay in this state for further attempts
+            return PROVIDE_FEEDBACK
+
     except (json.JSONDecodeError, KeyError) as e:
-        print(f"Error parsing JSON response or missing key: {e}")
+        logger.error(f"Error parsing JSON response or missing key: {e}, Response: {assistant_response}")
         await update.message.reply_text(
             "حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى لاحقًا 😞."
         )
-        return ConversationHandler.END  # Or handle the error more gracefully
+        return ConversationHandler.END
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred: {e}")
+        await update.message.reply_text(
+            "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى لاحقًا 😞."
+        )
+        return ConversationHandler.END
 
 
 async def ask_about_answer(update: Update, context: CallbackContext):
+    """Handles user questions about the answer."""
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("ما هو سؤالك حول الإجابة؟")
-    return ASK_ABOUT_ANSWER  # New state for asking about the answer
+    return ASK_ABOUT_ANSWER
 
 
 async def handle_ask_about_answer(update: Update, context: CallbackContext):
+    """Provides an explanation to the user's question about the answer."""
     user_question = update.message.text
     question_data = context.user_data["current_question"]
 
@@ -176,21 +185,21 @@ async def handle_ask_about_answer(update: Update, context: CallbackContext):
         f"Please provide a helpful and detailed response to the user's question, focusing on the context of the previous question and its answer. "
     )
 
-    assistant_response = await chatgpt.chat_with_assistant(
-        update.effective_user.id,
-        user_message=chatgpt_prompt,
-        update=update,
-        context=context,
-        save_history=False,
-        return_as_text=True,
-    )
-
-    if assistant_response == -1:
-        return ConversationHandler.END
-
-    message = await update.message.reply_text("جارٍ التفكير في رد... 🤔")
-
     try:
+        assistant_response = await chatgpt.chat_with_assistant(
+            update.effective_user.id,
+            user_message=chatgpt_prompt,
+            update=update,
+            context=context,
+            save_history=False,
+            return_as_text=True,
+        )
+
+        if assistant_response == -1:
+            return ConversationHandler.END
+
+        message = await update.message.reply_text("جارٍ التفكير في رد... 🤔")
+
         response_data = json.loads(assistant_response)
         await message.edit_text(response_data["text"])
 
@@ -201,26 +210,25 @@ async def handle_ask_about_answer(update: Update, context: CallbackContext):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             "اختر أحد الخيارات أدناه:", reply_markup=reply_markup
-        )  # Giving option to the user to ask more or go to next question
-
-        return REVIEW_QUESTION  # Return to REVIEW_QUESTION to handle button clicks
-
-    except (json.JSONDecodeError, KeyError) as e:
-        print(f"Error parsing JSON response or missing key: {e}")
-        await update.message.reply_text(
-            "حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى لاحقًا 😞."
         )
-        return ConversationHandler.END  # Or handle the error more gracefully
+        return REVIEW_QUESTION
+
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred: {e}")
+        await update.message.reply_text(
+            "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى لاحقًا 😞."
+        )
+        return ConversationHandler.END
 
 
 async def next_question(update: Update, context: CallbackContext):
+    """Presents the next question to the user."""
     query = update.callback_query
     await query.answer()
 
     question_data = get_random_question()
-
     if not question_data:
-        await update.callback_query.edit_message_text("لا توجد أسئلة متاحة حاليًا 😞.")
+        await query.edit_message_text("لا توجد أسئلة متاحة حاليًا 😞.")
         return ConversationHandler.END
 
     context.user_data["current_question"] = question_data
@@ -231,18 +239,15 @@ async def next_question(update: Update, context: CallbackContext):
 ج: {question_data['option_c']}
 د: {question_data['option_d']}"""
 
-    keyboard = [
-        [InlineKeyboardButton("إنهاء المحادثة 🔚", callback_data="end_chat")]
-    ]  # End conversation button
+    keyboard = [[InlineKeyboardButton("إنهاء المحادثة 🔚", callback_data="end_chat")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(
-        formatted_question, reply_markup=reply_markup
-    )  # Add the markup here
+    await query.edit_message_text(formatted_question, reply_markup=reply_markup)
     return PROVIDE_FEEDBACK
 
 
 async def handle_ask_questions(update: Update, context: CallbackContext):
+    """Handles free-form questions from the user."""
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
@@ -254,11 +259,11 @@ async def handle_ask_questions(update: Update, context: CallbackContext):
 
     messages = await chatgpt.get_chat_history(user_id)
     context.user_data["messages"] = messages
-
     return ASK_QUESTION
 
 
 async def ask_question_chatgpt(update: Update, context: CallbackContext):
+    """Handles and responds to free-form user questions using ChatGPT."""
     user_question = update.message.text
 
     SYSTEM_MESSAGE = """
@@ -277,7 +282,6 @@ async def ask_question_chatgpt(update: Update, context: CallbackContext):
             system_message=SYSTEM_MESSAGE,
             save_history=False,
         )
-
         if assistant_response == -1:
             return ConversationHandler.END
 
@@ -288,28 +292,29 @@ async def ask_question_chatgpt(update: Update, context: CallbackContext):
                 "حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى لاحقًا 😞"
             )
     except Exception as e:
+        logger.exception(f"An unexpected error occurred: {e}")
         await update.message.reply_text(
-            "حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى لاحقًا 😞."
+            "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى لاحقًا 😞."
         )
-        print(f"Error in ask_question_chatgpt: {e}")
     return ASK_QUESTION
 
 
 async def cancel_learning_converstation(update: Update, context: CallbackContext):
+    """Cancels the conversation and returns to the main menu."""
     query = update.callback_query
-    if query:  # Check if the call came from a callback query
+    if query:
         await query.answer()
 
-    await update.callback_query.edit_message_text(  # Edit the message to remove the question
+    await query.edit_message_text(
         "تم إلغاء التعلم. إذا كنت بحاجة إلى أي شيء آخر، فأعلمني! 👋"
         "اليك القائمة الرئيسية 🏡"
     )
     await main_menu_handler(query, context)
-
     return ConversationHandler.END
 
 
 async def cancel_learning(update: Update, context: CallbackContext):
+    """Cancels the conversation."""
     await update.message.reply_text(
         "تم إلغاء التعلم. إذا كنت بحاجة إلى أي شيء آخر، فأعلمني! 👋"
     )
