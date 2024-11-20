@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
     CommandHandler,
 )
-from config import DATABASE_FILE
+from config import DATABASE_FILE, SUBSCRIPTION_PLANS
 from utils.subscription_management import (
     SERIAL_CODE_DATA,
     activate_free_trial,
@@ -40,6 +40,9 @@ async def handle_subscription(update: Update, context: CallbackContext):
             InlineKeyboardButton(
                 "بدء تجربة مجانية 🎁", callback_data="handle_start_free_trial"
             )
+        ],
+        [
+            InlineKeyboardButton("عرض باقات الاشتراك 📄", callback_data="show_plans")
         ],
         [
             InlineKeyboardButton(
@@ -97,6 +100,9 @@ async def handle_start_free_trial(update: Update, context: CallbackContext):
             "لديك بالفعل اشتراك نشط أو لقد استخدمت تجربتك المجانية من قبل."
         )
 
+async def handle_subscription_plans(update: Update, context: CallbackContext):
+    """Sends the subscription plans information to the user."""
+    await update.callback_query.message.reply_text(SUBSCRIPTION_PLANS)
 
 async def handle_view_subscription_details(update: Update, context: CallbackContext):
     """Handles the 'عرض تفاصيل الاشتراك' sub-option."""
@@ -396,6 +402,7 @@ SUBSCRIPTION_HANDLERS = {
     "subscription": handle_subscription,
     # handler for sub button
     "handle_start_free_trial": handle_start_free_trial,
+    "show_plans": handle_subscription_plans,
     "handle_view_subscription_details": handle_view_subscription_details,
     "handle_change_cancel_subscription": handle_change_cancel_subscription,
     "handle_earn_subscription_referral": handle_earn_subscription_referral,

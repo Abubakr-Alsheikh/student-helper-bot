@@ -49,6 +49,9 @@ UNDER_DEVLOPING_MESSAGE = get_text_from_file(
 CONNECT_TELEGRAM_USERNAME = get_text_from_file(
     os.path.join(TEXT_FILES_DIRECTORY, "حساب للتواصل و الدعم.txt")
 )
+SUBSCRIPTION_PLANS = get_text_from_file(
+    os.path.join(TEXT_FILES_DIRECTORY, "خطط الاشتراك.txt")
+)
 
 # ----------------
 # Excel files directory
