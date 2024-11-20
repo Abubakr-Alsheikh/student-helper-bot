@@ -168,23 +168,6 @@ def create_tables(update: Update = None, context: CallbackContext = None):
     """
     )
 
-    # User Answers Table
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS user_answers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            previous_tests_id INTEGER,
-            question_id INTEGER,
-            user_answer TEXT,
-            is_correct INTEGER,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (previous_tests_id) REFERENCES previous_tests(id) ON DELETE CASCADE,
-            FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
-        )
-    """
-    )
-
     # Previous Tests Table
     cursor.execute(
         """
@@ -198,6 +181,23 @@ def create_tables(update: Update = None, context: CallbackContext = None):
             pdf_path TEXT,
             video_path TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """
+    )
+
+    # User Answers Table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_answers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            previous_tests_id INTEGER,
+            question_id INTEGER,
+            user_answer TEXT,
+            is_correct INTEGER,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (previous_tests_id) REFERENCES previous_tests(id) ON DELETE CASCADE,
+            FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
         )
     """
     )

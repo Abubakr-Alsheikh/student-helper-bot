@@ -944,14 +944,17 @@ async def handle_view_test_details(update: Update, context: CallbackContext):
         ],
         [
             InlineKeyboardButton(
+                "تحميل الفيديو 🎥", callback_data=f"download_video:{test_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 "الرجوع للخلف 🔙", callback_data="handle_list_previous_tests"
             )
         ],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(message, reply_markup=reply_markup)
-
-
 async def download_test_pdf(update: Update, context: CallbackContext):
     """Downloads the PDF file for the test."""
     query = update.callback_query
@@ -966,29 +969,169 @@ async def download_test_pdf(update: Update, context: CallbackContext):
         )
         return
 
-    # Fetch the pdf_path using the test_id using database function
-    pdf_path = database.get_data(
-        "SELECT pdf_path FROM previous_tests WHERE id = ?", (test_id,)
+    # Send initial "generating" message
+    generating_message = await query.message.reply_text(
+        "جارٍ إنشاء ملف PDF... ⏳"
     )
 
-    if pdf_path and pdf_path[0][0]:
+    # Fetch test details to regenerate PDF if needed
+    test_details = database.get_data(
+        """
+        SELECT user_id, num_questions, pdf_path 
+        FROM previous_tests 
+        WHERE id = ?
+        """, 
+        (test_id,)
+    )
+
+    if not test_details:
+        await generating_message.edit_text("عذراً، لم يتم العثور على بيانات الاختبار. 😞")
+        return
+
+    user_id, num_questions, pdf_path = test_details[0]
+
+    # Check if PDF needs to be regenerated
+    if not pdf_path or not os.path.exists(pdf_path):
+        # Await the initial generating message
+        await generating_message.edit_text("جارٍ إنشاء ملف PDF... 🔄")
+
+        # Retrieve the questions for this test
+        questions = database.get_data(
+            """
+            SELECT q.* 
+            FROM questions q
+            JOIN user_answers ua ON q.id = ua.question_id
+            WHERE ua.previous_tests_id = ?
+            """, 
+            (test_id,)
+        )
+
+        # Regenerate PDF
+        pdf_path = await generate_quiz_pdf(questions, user_id, "tests")
+        
+        if pdf_path:
+            # Update the database with the new PDF path
+            database.execute_query(
+                "UPDATE previous_tests SET pdf_path = ? WHERE id = ?", 
+                (pdf_path, test_id)
+            )
+        else:
+            await generating_message.edit_text("حدث خطأ أثناء إنشاء ملف PDF. 😞")
+            return
+
+    # Update generating message before sending file
+    await generating_message.edit_text("جارٍ تحميل ملف PDF... 📄")
+
+    if pdf_path:
         try:
-            with open(pdf_path[0][0], "rb") as f:
+            with open(pdf_path, "rb") as f:
                 await context.bot.send_document(
                     chat_id=query.message.chat_id, document=f
                 )
+            
+            # Delete the generating message
+            await generating_message.delete()
         except FileNotFoundError:
-            logger.error(f"PDF file not found at path: {pdf_path[0][0]}")
-            await query.message.reply_text(
+            logger.error(f"PDF file not found at path: {pdf_path}")
+            await generating_message.edit_text(
                 "عذراً، لم يتم العثور على ملف PDF. قد يكون قد تم حذفه."
             )
         except Exception as e:
             logger.error(f"Error sending PDF for test_id: {test_id}, {e}")
-            await query.message.reply_text(
+            await generating_message.edit_text(
                 "حدث خطأ أثناء إرسال ملف PDF، يرجى المحاولة مرة أخرى."
             )
     else:
-        await query.message.reply_text("لم يتم العثور على ملف PDF لهذا الاختبار. 😞")
+        await generating_message.edit_text("لم يتم العثور على ملف PDF لهذا الاختبار. 😞")
+
+async def download_test_video(update: Update, context: CallbackContext):
+    """Downloads the video file for the test."""
+    query = update.callback_query
+    await query.answer()
+    try:
+        _, test_id = query.data.split(":")
+        test_id = int(test_id)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Error extracting test_id from {query.data}: {e}")
+        await query.message.reply_text(
+            "حدث خطأ أثناء تحميل الفيديو، يرجى المحاولة مرة أخرى."
+        )
+        return
+
+    # Send initial "generating" message
+    generating_message = await query.message.reply_text(
+        "جارٍ إنشاء الفيديو... ⏳"
+    )
+
+    # Fetch test details to regenerate video if needed
+    test_details = database.get_data(
+        """
+        SELECT user_id, num_questions, video_path 
+        FROM previous_tests 
+        WHERE id = ?
+        """, 
+        (test_id,)
+    )
+
+    if not test_details:
+        await generating_message.edit_text("عذراً، لم يتم العثور على بيانات الاختبار. 😞")
+        return
+
+    user_id, num_questions, video_path = test_details[0]
+
+    # Check if video needs to be regenerated
+    if not video_path or not os.path.exists(video_path):
+        # Update generating message for video generation
+        await generating_message.edit_text("جارٍ إنشاء الفيديو... 🔄")
+
+        # Retrieve the questions for this test
+        questions = database.get_data(
+            """
+            SELECT q.* 
+            FROM questions q
+            JOIN user_answers ua ON q.id = ua.question_id
+            WHERE ua.previous_tests_id = ?
+            """, 
+            (test_id,)
+        )
+
+        # Regenerate Video
+        video_path = await generate_quiz_video(questions, user_id, "tests")
+        
+        if video_path:
+            # Update the database with the new video path
+            database.execute_query(
+                "UPDATE previous_tests SET video_path = ? WHERE id = ?", 
+                (video_path, test_id)
+            )
+        else:
+            await generating_message.edit_text("حدث خطأ أثناء إنشاء الفيديو. 😞")
+            return
+
+    # Update generating message before sending file
+    await generating_message.edit_text("جارٍ تحميل الفيديو... 🎥")
+
+    if video_path:
+        try:
+            with open(video_path, "rb") as f:
+                await context.bot.send_video(
+                    chat_id=query.message.chat_id, video=f
+                )
+            
+            # Delete the generating message
+            await generating_message.delete()
+        except FileNotFoundError:
+            logger.error(f"Video file not found at path: {video_path}")
+            await generating_message.edit_text(
+                "عذراً، لم يتم العثور على ملف الفيديو. قد يكون قد تم حذفه."
+            )
+        except Exception as e:
+            logger.error(f"Error sending video for test_id: {test_id}, {e}")
+            await generating_message.edit_text(
+                "حدث خطأ أثناء إرسال ملف الفيديو، يرجى المحاولة مرة أخرى."
+            )
+    else:
+        await generating_message.edit_text("لم يتم العثور على ملف الفيديو لهذا الاختبار. 😞")
 
 
 # Dictionary to map handler names to functions
@@ -1002,6 +1145,7 @@ TESTS_HANDLERS = {
 TESTS_HANDLERS_PATTERN = {
     r"^output_format_tests:.+$": handle_output_format_choice,
     r"^download_pdf:.+$": download_test_pdf,
+    r"^download_video:.+$": download_test_video,
     r"^main_category_page:\d+$": lambda update, context: handle_show_main_categories(
         update, context, int(update.callback_query.data.split(":")[1])
     ),  # Pagination handler
