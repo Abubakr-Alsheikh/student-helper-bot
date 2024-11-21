@@ -16,7 +16,7 @@ async def generate_word_doc(template_path, output_path, quiz_data):
     """Generates the Word document."""
     try:
         doc = DocxTemplate(template_path)
-        doc.render({"questions": quiz_data})
+        doc.render(quiz_data)
         doc.save(output_path)
     except Exception as e:
         logger.error(f"Error generating Word document: {e}")

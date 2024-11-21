@@ -76,6 +76,8 @@ async def generate_quiz_pdf(questions, user_id, which_quiz, category_name=None) 
             user_dir, f"{quiz}_يوم_{datestamp}_الوقت_{timestamp}.pdf"
         )
 
+        quiz_data = {"questions": quiz_data}
+
         try:
             await generate_word_doc(Q_AND_A_FILE_PATH, word_filename, quiz_data)
         except Exception as e:
