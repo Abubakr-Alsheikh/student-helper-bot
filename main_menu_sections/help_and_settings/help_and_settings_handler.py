@@ -93,9 +93,6 @@ async def edit_notification_settings(update: Update, context: CallbackContext):
     """Handles editing notification settings."""
     user_id = update.effective_user.id
 
-    # Send a message indicating processing
-    await update.callback_query.answer("جاري جلب إعدادات الإشعارات... 🔄")
-
     # Fetch user's notification settings
     try:
         is_enabled = await user_management.get_user_setting(
@@ -131,8 +128,6 @@ async def handle_toggle_notifications(update: Update, context: CallbackContext):
     """Handle toggling notifications on/off."""
     user_id = int(update.callback_query.data.split("_")[-1])
 
-    await update.callback_query.answer("جاري تحديث إعدادات الإشعارات... 🔄")
-
     try:
         # Get current notification setting
         is_enabled = await user_management.get_user_setting(
@@ -165,8 +160,6 @@ async def handle_toggle_notifications(update: Update, context: CallbackContext):
 async def reminder_settings(update: Update, context: CallbackContext):
     """Handles editing reminder settings (simplified)."""
     user_id = update.effective_user.id
-
-    await update.callback_query.answer("جاري جلب إعدادات التذكير... 🔄")
 
     # Get the current reminder frequency (number of reminders per day)
     try:
@@ -206,8 +199,6 @@ async def handle_set_reminder_frequency(update: Update, context: CallbackContext
     user_id = update.effective_user.id
     frequency = int(update.callback_query.data.split("_")[-1])
 
-    await update.callback_query.answer("جاري تحديث عدد مرات التذكير... 🔄")
-
     try:
         # Update database
         await user_management.update_reminder_frequency(user_id, frequency)
@@ -237,8 +228,6 @@ async def handle_set_reminder_frequency(update: Update, context: CallbackContext
 async def edit_response_method_settings(update: Update, context: CallbackContext):
     """Handles editing response method settings."""
     user_id = update.effective_user.id
-
-    await update.callback_query.answer("جاري جلب تفضيلات طرق الرد... 🔄")
 
     # Fetch user's preferred response method
     try:
@@ -271,8 +260,6 @@ async def handle_set_response_method(update: Update, context: CallbackContext):
         -1
     ]  # Extract 'written' or 'voice'
 
-    await update.callback_query.answer("جاري تحديث طريقة الرد... 🔄")
-
     # Update in the database
     try:
         await user_management.update_user_setting(user_id, "voice_written", new_method)
@@ -292,8 +279,6 @@ async def handle_set_response_method(update: Update, context: CallbackContext):
 
 async def handle_faq(update: Update, context: CallbackContext):
     """Handles the 'الأسئلة الشائعة' sub-option."""
-
-    await update.callback_query.answer("جاري جلب فئات الأسئلة الشائعة... 🔄")
 
     # 1. Get FAQ categories from the database
     try:
@@ -330,8 +315,6 @@ async def handle_faq_category(update: Update, context: CallbackContext):
 
     selected_category = get_category_name_by_index(selected_category_index)
 
-    await query.answer("جاري جلب الأسئلة الشائعة لهذه الفئة... 🔄")
-
     try:
         faqs = await get_faqs_by_category(selected_category)
     except Exception as e:
@@ -359,8 +342,6 @@ async def handle_faq_question(update: Update, context: CallbackContext):
     # 1. Get the question_id from the callback data
     query = update.callback_query
     question_id = int(query.data.replace("faq_question_", ""))
-
-    await query.answer("جاري جلب إجابة السؤال... 🔄")
 
     # 2. Fetch the answer and question (using question_id) from the database
     try:
