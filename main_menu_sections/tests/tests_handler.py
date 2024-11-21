@@ -948,12 +948,12 @@ async def handle_view_test_details(update: Update, context: CallbackContext):
     keyboard = [
         [
             InlineKeyboardButton(
-                "تحميل ملف PDF ⬇️", callback_data=f"download_pdf:{test_id}"
+                "تحميل ملف PDF ⬇️", callback_data=f"download_tests_pdf:{test_id}"
             )
         ],
         [
             InlineKeyboardButton(
-                "تحميل الفيديو 🎥", callback_data=f"download_video:{test_id}"
+                "تحميل الفيديو 🎥", callback_data=f"download_tests_video:{test_id}"
             )
         ],
         [
@@ -1177,8 +1177,8 @@ TESTS_HANDLERS = {
 
 TESTS_HANDLERS_PATTERN = {
     r"^output_format_tests:.+$": handle_output_format_choice,
-    r"^download_pdf:.+$": download_test_pdf,
-    r"^download_video:.+$": download_test_video,
+    r"^download_tests_pdf:.+$": download_test_pdf,
+    r"^download_tests_video:.+$": download_test_video,
     r"^main_category_page:\d+$": lambda update, context: handle_show_main_categories(
         update, context, int(update.callback_query.data.split(":")[1])
     ),  # Pagination handler
