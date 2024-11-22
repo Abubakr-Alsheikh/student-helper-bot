@@ -2,6 +2,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
 from datetime import datetime, timedelta
+import math
 import os
 import random
 from typing import Dict, List
@@ -742,14 +743,34 @@ async def end_chat(update: Update, context: CallbackContext) -> int:
     )
     return ConversationHandler.END
 
+ITEMS_PER_PAGE = 5
 
 async def track_progress(update: Update, context: CallbackContext):
-    """Tracks the user's progress in level determination."""
+    """Tracks the user's progress in level determination with pagination."""
     user_id = update.effective_user.id
+    data = update.callback_query.data.split(":") if update.callback_query.data else ["track_progress"]
+    page = int(data[1]) if len(data) > 1 else 1
 
     try:
+        # Get total count for pagination
+        total_determinations = get_data(
+            "SELECT COUNT(*) FROM level_determinations WHERE user_id = ?",
+            (user_id,)
+        )[0][0]
+
+        # Calculate offset for pagination
+        offset = (page - 1) * ITEMS_PER_PAGE
+
+        # Get paginated records
         level_determinations = get_data(
-            "SELECT * FROM level_determinations WHERE user_id = ?", (user_id,)
+            """
+            SELECT id, timestamp, percentage, num_questions 
+            FROM level_determinations 
+            WHERE user_id = ? 
+            ORDER BY timestamp DESC 
+            LIMIT ? OFFSET ?
+            """,
+            (user_id, ITEMS_PER_PAGE, offset)
         )
     except Exception as e:
         logger.error(f"Error retrieving level determinations: {e}")
@@ -765,32 +786,50 @@ async def track_progress(update: Update, context: CallbackContext):
         return
 
     keyboard = []
-    for i, level_determination in enumerate(level_determinations):
-        timestamp = level_determination[2]
+    for i, determination in enumerate(level_determinations):
+        det_id, timestamp, percentage, num_questions = determination
         test_date = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f").strftime(
-            "%Y-%m-%d %H:%M:%S"
+            "%Y-%m-%d %H:%M"
         )
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    f"الاختبار {i+1} ({test_date}) 🗓️",
-                    callback_data=f"show_level_details_{level_determination[0]}",
+                    f"اختبار {total_determinations - offset - i} - بتاريخ {test_date} - النتيجة ({percentage:.1f}%)",
+                    callback_data=f"show_level_details_{det_id}"
                 )
             ]
         )
 
+    # Add pagination controls
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(
+            InlineKeyboardButton(
+                "⬅️ السابق", callback_data=f"track_progress:{page - 1}"
+            )
+        )
+    if offset + ITEMS_PER_PAGE < total_determinations:
+        nav_buttons.append(
+            InlineKeyboardButton(
+                "التالي ➡️", callback_data=f"track_progress:{page + 1}"
+            )
+        )
+
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
     keyboard.append(
         [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data="level_determination")]
     )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.callback_query.edit_message_text(
-        "اختر الاختبار تحديد المستوى لعرض تفاصيله: 🔍", reply_markup=reply_markup
+        f"اختر اختبار تحديد المستوى لعرض تفاصيله (صفحة {page} من {math.ceil(total_determinations / ITEMS_PER_PAGE)}): 🔍",
+        reply_markup=reply_markup
     )
 
-
 async def show_level_details(update: Update, context: CallbackContext):
-    """Shows details of a specific level determination test."""
+    """Shows detailed statistics for a specific level determination test."""
     query = update.callback_query
     try:
         level_determination_id = int(query.data.split("_")[-1])
@@ -800,46 +839,70 @@ async def show_level_details(update: Update, context: CallbackContext):
         return
 
     try:
-        level_determination = get_data(
-            "SELECT * FROM level_determinations WHERE id = ?",
-            (level_determination_id,),
+        # Get detailed test information including answer statistics
+        test_data = get_data(
+            """
+            SELECT ld.timestamp, ld.num_questions, ld.percentage, ld.time_taken, 
+                   ld.pdf_path, ld.video_path,
+                   COUNT(CASE WHEN lda.is_correct = 1 THEN 1 END) as correct_answers,
+                   COUNT(lda.id) as total_answered
+            FROM level_determinations ld
+            LEFT JOIN level_determination_answers lda ON ld.id = lda.level_determination_id
+            WHERE ld.id = ?
+            GROUP BY ld.id
+            """,
+            (level_determination_id,)
         )
     except Exception as e:
         logger.error(f"Error fetching level determination details: {e}")
         await query.message.reply_text("حدث خطأ أثناء جلب بيانات الاختبار. ⚠️")
         return
 
-    if not level_determination:
+    if not test_data:
         await query.message.reply_text("لم يتم العثور على هذا الاختبار. ⚠️")
         return
 
-    level_determination = level_determination[0]
-    timestamp = level_determination[2]
-    percentage = level_determination[4]
-    time_taken = level_determination[5]
-    pdf_path = level_determination[6]
+    (
+        timestamp,
+        num_questions,
+        percentage,
+        time_taken,
+        pdf_path,
+        video_path,
+        correct_answers,
+        total_answered
+    ) = test_data[0]
+
+    test_date = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f").strftime(
+        "%Y/%m/%d %H:%M"
+    )
 
     message = (
-        f"تفاصيل اختبار المستوى:\n"
-        f"التاريخ: {timestamp} 🗓️\n"
-        f"النسبة المئوية: {percentage:.2f}% 📊\n"
-        f"الوقت المستغرق: {int(time_taken // 60)} دقيقة و {int(time_taken % 60)} ثانية. ⏱️\n"
+        f"📊 تفاصيل اختبار تحديد المستوى\n\n"
+        f"📅 التاريخ: {test_date}\n"
+        f"📝 عدد الأسئلة: {num_questions}\n"
+        f"✅ الإجابات الصحيحة: {correct_answers}\n"
+        f"📊 النتيجة النهائية: {percentage:.1f}%\n"
+        f"⏱ الوقت المستغرق: {int(time_taken // 60)} دقيقة و{int(time_taken % 60)} ثانية\n"
+        f"📋 الأسئلة المجاب عليها: {total_answered}/{num_questions}"
     )
 
     keyboard = [
         [
             InlineKeyboardButton(
                 "تحميل ملف PDF ⬇️",
-                callback_data=f"download_level_pdf:{level_determination_id}",
+                callback_data=f"download_level_pdf:{level_determination_id}"
             )
         ],
         [
             InlineKeyboardButton(
-                "تحميل الفيديو 🎥", callback_data=f"download_tests_video:{level_determination_id}"
+                "تحميل الفيديو 🎥",
+                callback_data=f"download_tests_video:{level_determination_id}"
             )
         ],
-        [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data="track_progress")],
+        [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data="track_progress")]
     ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(message, reply_markup=reply_markup)
 
