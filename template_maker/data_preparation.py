@@ -1,10 +1,10 @@
 import docx
 import pandas as pd
 from pptx import Presentation
-from config import EXCEL_FILE_BASHAR, POWERPOINT_MAIN_PATH, WORD_MAIN_PATH
+from config import EXCEL_FILE_QUANTITATIVE, POWERPOINT_MAIN_PATH, WORD_MAIN_PATH
 
 
-def read_excel_data(file_path=EXCEL_FILE_BASHAR):
+def read_excel_data(file_path=EXCEL_FILE_QUANTITATIVE):
     """Reads data from the Excel file."""
     df = pd.read_excel(file_path)
     return df

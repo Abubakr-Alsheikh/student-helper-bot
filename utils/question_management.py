@@ -2,7 +2,7 @@ import os
 import sqlite3
 import pandas as pd
 
-from config import DATABASE_FILE, EXCEL_FILE_BASHAR, VERBAL_FILE
+from config import DATABASE_FILE, EXCEL_FILE_QUANTITATIVE, VERBAL_FILE
 from utils.database import create_connection, get_data, execute_query
 
 
@@ -12,7 +12,7 @@ def generate_questions_with_categories():
     print(count)
     if count[0][0] == 0:  # If the table is empty, populate it from Excel
         df = pd.read_excel(
-            EXCEL_FILE_BASHAR,
+            EXCEL_FILE_QUANTITATIVE,
             usecols=[
                 "الجواب الصحيح",
                 "نص السؤال مدقق",
@@ -184,7 +184,7 @@ def generate_questions():
     count = get_data("SELECT COUNT(*) FROM questions")
     if count[0][0] == 0:  # If the table is empty, populate it from Excel
         df = pd.read_excel(
-            EXCEL_FILE_BASHAR,
+            EXCEL_FILE_QUANTITATIVE,
             usecols=[
                 "الجواب الصحيح",
                 "نص السؤال مدقق",

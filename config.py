@@ -57,7 +57,7 @@ SUBSCRIPTION_PLANS = get_text_from_file(
 EXCEL_FILES_DIRECTORY = os.path.join(MAIN_FILES, "Excel Files")
 
 # Excel files
-EXCEL_FILE_BASHAR = os.path.join(EXCEL_FILES_DIRECTORY, "الاسئلة الكمية.xlsx")
+EXCEL_FILE_QUANTITATIVE = os.path.join(EXCEL_FILES_DIRECTORY, "الاسئلة الكمية.xlsx")
 REMINDER_FILE = os.path.join(EXCEL_FILES_DIRECTORY, "التذكرات.xlsx")
 FAQ_FILE = os.path.join(EXCEL_FILES_DIRECTORY, "الاسئلة الشائعة.xlsx")
 SECTION_CONFIG_FILE = os.path.join(EXCEL_FILES_DIRECTORY, "تحكم بالاقسام.xlsx")

@@ -1,13 +1,13 @@
 import os
 import pandas as pd
 
-from config import EXCEL_FILE_BASHAR
+from config import EXCEL_FILE_QUANTITATIVE
 from utils import database
 
 
 def populate_categories_data():
     """Populates the database with main and subcategories from your Excel file."""
-    excel_file_path = EXCEL_FILE_BASHAR  # Replace with your Excel file
+    excel_file_path = EXCEL_FILE_QUANTITATIVE  # Replace with your Excel file
     df = pd.read_excel(excel_file_path) 
 
     for _, row in df.iterrows():
