@@ -107,8 +107,8 @@ async def handle_main_menu_option(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
     callback_data = query.data
-    print(callback_data)
     if callback_data == "go_back":
         # Logic to go back to the previous menu or step
         await main_menu_handler(query, context)
         return
+    print(callback_data)
