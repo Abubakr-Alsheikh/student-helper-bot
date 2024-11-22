@@ -909,7 +909,7 @@ async def handle_list_previous_tests(update: Update, context: CallbackContext):
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    f"اختبار {total_tests - i} - بتاريخ {formatted_date} - النتيجة ({score}/{num_questions})",
+                    f"اختبار {total_tests - offset - i} - بتاريخ {formatted_date} - النتيجة ({score}/{num_questions})",
                     callback_data=f"view_test_details:{test_id}",
                 )
             ]

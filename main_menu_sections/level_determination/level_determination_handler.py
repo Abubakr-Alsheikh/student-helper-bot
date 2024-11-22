@@ -828,6 +828,7 @@ async def track_progress(update: Update, context: CallbackContext):
         reply_markup=reply_markup
     )
 
+
 async def show_level_details(update: Update, context: CallbackContext):
     """Shows detailed statistics for a specific level determination test."""
     query = update.callback_query
