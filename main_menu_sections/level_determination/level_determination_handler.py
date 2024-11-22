@@ -1112,7 +1112,7 @@ async def download_video(update: Update, context: CallbackContext):
     await query.answer()
     try:
         _, level_determination_id = query.data.split(":")
-        test_id = int(test_id)
+        level_determination_id = int(level_determination_id)
     except (ValueError, IndexError) as e:
         logger.error(f"Error extracting level_determination_id from {query.data}: {e}")
         await query.message.reply_text(
@@ -1130,7 +1130,7 @@ async def download_video(update: Update, context: CallbackContext):
         FROM level_determinations 
         WHERE id = ?
         """,
-        (test_id,),
+        (level_determination_id,),
     )
 
     if not test_details:
@@ -1152,7 +1152,7 @@ async def download_video(update: Update, context: CallbackContext):
             FROM level_determinations 
             WHERE user_id = ? AND id <= ?
             """,
-            (user_id, test_id),
+            (user_id, level_determination_id),
         )[0][0]
         # Retrieve the questions for this test
         questions = database.get_data(
@@ -1162,7 +1162,7 @@ async def download_video(update: Update, context: CallbackContext):
             JOIN level_determination_answers ua ON q.id = ua.question_id
             WHERE ua.level_determination_id = ?
             """,
-            (test_id,),
+            (level_determination_id,),
         )
 
         # Regenerate Video
@@ -1172,7 +1172,7 @@ async def download_video(update: Update, context: CallbackContext):
             # Update the database with the new video path
             database.execute_query(
                 "UPDATE level_determinations SET video_path = ? WHERE id = ?",
-                (video_path, test_id),
+                (video_path, level_determination_id),
             )
         else:
             await generating_message.edit_text("حدث خطأ أثناء إنشاء الفيديو. 😞")
@@ -1194,7 +1194,7 @@ async def download_video(update: Update, context: CallbackContext):
                 "عذراً، لم يتم العثور على ملف الفيديو. قد يكون قد تم حذفه."
             )
         except Exception as e:
-            logger.error(f"Error sending video for test_id: {test_id}, {e}")
+            logger.error(f"Error sending video for level_determination_id: {level_determination_id}, {e}")
             await generating_message.edit_text(
                 "حدث خطأ أثناء إرسال ملف الفيديو، يرجى المحاولة مرة أخرى."
             )
