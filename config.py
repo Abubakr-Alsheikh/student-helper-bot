@@ -28,6 +28,9 @@ MAIN_FILES = "Main Files"
 
 # Path to the folder containing welcoming materials
 WELCOMING_FOLDER = os.path.join(MAIN_FILES, "Welcoming")
+WELCOMING_TEXT_PATH = os.path.join(WELCOMING_FOLDER, "text.txt")
+WELCOMING_AUDIO_PATH = os.path.join(WELCOMING_FOLDER, "audio.mp3")
+WELCOMING_VIDEO_PATH = os.path.join(WELCOMING_FOLDER, "video.mp4")
 
 IMAGE_FOLDER = os.path.join(MAIN_FILES, "Images")
 
@@ -42,10 +45,6 @@ TEXT_FILES_DIRECTORY = os.path.join(MAIN_FILES, "Text Files")
 WELCOMING_MESSAGE = get_text_from_file(
     os.path.join(TEXT_FILES_DIRECTORY, "رسالة الترحيب عند بدأ البوت.txt")
 )
-UNDER_DEVLOPING_MESSAGE = get_text_from_file(
-    os.path.join(TEXT_FILES_DIRECTORY, "رسالة تحت التطوير.txt")
-)
-
 CONNECT_TELEGRAM_USERNAME = get_text_from_file(
     os.path.join(TEXT_FILES_DIRECTORY, "حساب للتواصل و الدعم.txt")
 )
