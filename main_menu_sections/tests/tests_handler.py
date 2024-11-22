@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import os
 import random
 from datetime import datetime, timedelta
@@ -870,38 +871,73 @@ async def end_chat(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 
-async def handle_list_previous_tests(update: Update, context: CallbackContext):
-    """Handles the 'قائمة الاختبارات السابقة' sub-option."""
-    user_id = update.effective_user.id
+ITEMS_PER_PAGE = 5  # Define the number of items to show per page
 
-    # Retrieve test records using database function
+
+async def handle_list_previous_tests(update: Update, context: CallbackContext):
+    """Handles the 'قائمة الاختبارات السابقة' sub-option with pagination."""
+
+    query = update.callback_query
+    user_id = update.effective_user.id
+    data = query.data.split(":") if query.data else ["tests"]
+    page = int(data[1]) if len(data) > 1 else 1
+
+    # Retrieve total test count for pagination
+    total_tests = database.get_data(
+        "SELECT COUNT(*) FROM previous_tests WHERE user_id = ?", (user_id,)
+    )[0][0]
+
+    # Calculate offset for pagination
+    offset = (page - 1) * ITEMS_PER_PAGE
+
+    # Retrieve test records for the current page
     test_records = database.get_data(
-        "SELECT id, timestamp, score, num_questions FROM previous_tests WHERE user_id = ? ORDER BY timestamp DESC",
-        (user_id,),
+        "SELECT id, timestamp, score, num_questions FROM previous_tests WHERE user_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+        (user_id, ITEMS_PER_PAGE, offset),
     )
 
     if not test_records:
-        await update.callback_query.edit_message_text("ليس لديك اختبارات سابقة. 😞")
+        await query.edit_message_text("ليس لديك اختبارات سابقة. 😞")
         return
 
     # Format and display test list
     keyboard = []
     for i, record in enumerate(test_records):
         test_id, timestamp, score, num_questions = record
+        date_time = datetime.fromisoformat(timestamp)
+        formatted_date = date_time.strftime("%Y-%m-%d %H:%M")  # Example format
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    f"اختبار {i + 1} - {timestamp} ({score}/{num_questions})",
+                    f"اختبار {total_tests - i} - بتاريخ {formatted_date} - النتيجة ({score}/{num_questions})",
                     callback_data=f"view_test_details:{test_id}",
                 )
             ]
         )
 
+    # Pagination controls
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(
+            InlineKeyboardButton(
+                "⬅️ السابق", callback_data=f"handle_list_previous_tests:{page - 1}"
+            )
+        )
+    if offset + ITEMS_PER_PAGE < total_tests:
+        nav_buttons.append(
+            InlineKeyboardButton(
+                "التالي ➡️", callback_data=f"handle_list_previous_tests:{page + 1}"
+            )
+        )
+
+    keyboard.append(nav_buttons)
     keyboard.append([InlineKeyboardButton("الرجوع للخلف 🔙", callback_data="tests")])
+
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.callback_query.edit_message_text(
-        "قائمة اختباراتك السابقة: 📜", reply_markup=reply_markup
+        f"قائمة اختباراتك السابقة (صفحة {page} من {math.ceil(total_tests / ITEMS_PER_PAGE)}): 📜",  # Indicate current page
+        reply_markup=reply_markup,
     )
 
 
@@ -909,6 +945,7 @@ async def handle_view_test_details(update: Update, context: CallbackContext):
     """Handles viewing the details of a specific test."""
     query = update.callback_query
     await query.answer()
+
     try:
         _, test_id = query.data.split(":")
         test_id = int(test_id)
@@ -919,12 +956,16 @@ async def handle_view_test_details(update: Update, context: CallbackContext):
         )
         return
 
-    # Retrieve test data using database function
+    # Get detailed test information
     test_data = database.get_data(
         """
-        SELECT timestamp, num_questions, score, time_taken, pdf_path
-        FROM previous_tests
-        WHERE id = ?
+        SELECT pt.timestamp, pt.num_questions, pt.score, pt.time_taken, pt.pdf_path,
+               COUNT(CASE WHEN ua.is_correct = 1 THEN 1 END) as correct_answers,
+               COUNT(ua.id) as total_answered
+        FROM previous_tests pt
+        LEFT JOIN user_answers ua ON pt.id = ua.previous_tests_id
+        WHERE pt.id = ?
+        GROUP BY pt.id
         """,
         (test_id,),
     )
@@ -933,18 +974,35 @@ async def handle_view_test_details(update: Update, context: CallbackContext):
         await query.answer("عذراً، لم يتم العثور على بيانات الاختبار. 😞")
         return
 
-    timestamp, num_questions, score, time_taken, pdf_path = test_data[0]
+    (
+        timestamp,
+        num_questions,
+        score,
+        time_taken,
+        pdf_path,
+        correct_answers,
+        total_answered,
+    ) = test_data[0]
 
-    # Format the message
-    message = (
-        f"تفاصيل الاختبار:\n"
-        f"التاريخ: {timestamp}\n"
-        f"عدد الأسئلة: {num_questions}\n"
-        f"الدرجة: {score}/{num_questions}\n"
-        f"الوقت المستغرق: {int(time_taken // 60)} دقيقة و{int(time_taken % 60)} ثانية\n"
+    # Format timestamp
+    test_date = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f").strftime(
+        "%Y/%m/%d %H:%M"
     )
 
-    # Add a button to download the PDF if it exists
+    # Calculate percentage
+    percentage = (score / num_questions) * 100 if num_questions > 0 else 0
+
+    # Format message with detailed statistics
+    message = (
+        f"📊 تفاصيل الاختبار\n\n"
+        f"📅 التاريخ: {test_date}\n"
+        f"📝 عدد الأسئلة: {num_questions}\n"
+        f"✅ الإجابات الصحيحة: {correct_answers}\n"
+        f"📊 النتيجة النهائية: {score}/{num_questions} ({percentage:.1f}%)\n"
+        f"⏱ الوقت المستغرق: {int(time_taken // 60)} دقيقة و{int(time_taken % 60)} ثانية\n"
+        f"📋 الأسئلة المجاب عليها: {total_answered}/{num_questions}"
+    )
+
     keyboard = [
         [
             InlineKeyboardButton(
@@ -962,6 +1020,7 @@ async def handle_view_test_details(update: Update, context: CallbackContext):
             )
         ],
     ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(message, reply_markup=reply_markup)
 
@@ -1129,7 +1188,9 @@ async def download_test_video(update: Update, context: CallbackContext):
         )
 
         # Regenerate Video
-        video_path = await generate_quiz_video(questions, user_id, "tests", timestamp, test_number)
+        video_path = await generate_quiz_video(
+            questions, user_id, "tests", timestamp, test_number
+        )
 
         if video_path:
             # Update the database with the new video path
@@ -1176,6 +1237,7 @@ TESTS_HANDLERS = {
 }
 
 TESTS_HANDLERS_PATTERN = {
+    r"^handle_list_previous_tests:\d+$": handle_list_previous_tests,
     r"^output_format_tests:.+$": handle_output_format_choice,
     r"^download_tests_pdf:.+$": download_test_pdf,
     r"^download_tests_video:.+$": download_test_video,
