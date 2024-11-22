@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-from config import CONTEXT_DIRECTORY, UNDER_DEVLOPING_MESSAGE
+from config import CONTEXT_DIRECTORY
 from handlers.main_menu_handler import main_menu_handler
 from handlers.personal_assistant_chat_handler import chatgpt, SYSTEM_MESSAGE
 from template_maker.generate_files import generate_quiz_pdf, generate_quiz_video

@@ -2,7 +2,6 @@ import os
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CallbackContext
 from telegram.error import BadRequest
-from config import UNDER_DEVLOPING_MESSAGE
 from main_menu_sections.traditional_learning.generating_materials import generate_material_pdf, generate_material_text, generate_material_video
 from utils.section_manager import section_manager
 from utils.category_mangement import (
@@ -59,10 +58,6 @@ async def handle_traditional_learning_type(update: Update, context: CallbackCont
 
     question_type = section_path.split(":")[-1]
     context.user_data["question_type"] = question_type
-
-    if question_type == "quantitative":
-        await query.message.reply_text(UNDER_DEVLOPING_MESSAGE)
-        return  # Stop further processing for quantitative
 
     if question_type == "verbal":
         keyboard = [
