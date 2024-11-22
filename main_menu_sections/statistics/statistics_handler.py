@@ -317,7 +317,7 @@ async def handle_progress_graph(update: Update, context: CallbackContext):
         z = np.polyfit(mdates.date2num(formatted_dates), percentages, 1)
         p = np.poly1d(z)
         ax_level_det.plot(
-            formatted_dates, p(mdates.date2num(formatted_dates)), "r--", label="Trend"
+            formatted_dates, p(mdates.date2num(formatted_dates)), "r--", label=get_display(arabic_reshaper.reshape("التحسن")
         )
         ax_level_det.legend()
 
@@ -355,7 +355,7 @@ async def handle_progress_graph(update: Update, context: CallbackContext):
         z = np.polyfit(mdates.date2num(formatted_dates), scores, 1)
         p = np.poly1d(z)
         ax_prev_tests.plot(
-            formatted_dates, p(mdates.date2num(formatted_dates)), "r--", label="Trend"
+            formatted_dates, p(mdates.date2num(formatted_dates)), "r--", label=get_display(arabic_reshaper.reshape("التحسن"))
         )
         ax_prev_tests.legend()
 
