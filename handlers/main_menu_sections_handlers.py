@@ -41,6 +41,7 @@ from main_menu_sections.rewards.rewards_handler import REWARDS_HANDLERS
 from main_menu_sections.design_for_you.design_for_you import (
     register_design_handlers,
 )
+from utils.section_manager import check_unlocked_sections
 
 
 # Dictionary for handlers
@@ -76,9 +77,10 @@ CONVERSATION_HANDLERS = {
     tips_and_strategies_conv_handler,
 }
 
-
 def register_all_main_menu_handlers(application: Application):
     """Registers all handlers for the bot."""
+
+    application.job_queue.run_repeating(check_unlocked_sections, interval=3600)
 
     for converstaion_handler in CONVERSATION_HANDLERS:
         application.add_handler(converstaion_handler)

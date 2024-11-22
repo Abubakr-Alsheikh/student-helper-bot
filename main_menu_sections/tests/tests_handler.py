@@ -22,6 +22,7 @@ from handlers.main_menu_handler import main_menu_handler
 from handlers.personal_assistant_chat_handler import chatgpt, SYSTEM_MESSAGE
 from template_maker.generate_files import generate_quiz_pdf, generate_quiz_video
 from utils import database
+from utils.section_manager import section_manager
 from utils.question_management import get_passage_content, get_questions_by_category
 from utils.subscription_management import check_subscription
 from utils.user_management import (
@@ -52,6 +53,14 @@ CHATTING = 0
 
 async def handle_tests(update: Update, context: CallbackContext):
     """Handles the 'الاختبارات' option and displays its sub-menu."""
+    query = update.callback_query
+    await query.answer()
+    section_path = query.data
+
+    # Check section availability
+    if not section_manager.is_section_available(section_path):
+        await query.message.reply_text(section_manager.get_section_message(section_path))
+        return
 
     if not await check_subscription(update, context):
         return
@@ -95,12 +104,15 @@ async def handle_quiz_type_choice(update: Update, context: CallbackContext):
     """Handles the user's choice of quiz type."""
     query = update.callback_query
     await query.answer()
+    section_path = query.data
+
+    # Check section availability
+    if not section_manager.is_section_available(section_path):
+        await query.message.reply_text(section_manager.get_section_message(section_path))
+        return
+
     _, quiz_type = query.data.split(":")
     context.user_data["quiz_type"] = quiz_type
-
-    if quiz_type == "quantitative":
-        await query.message.reply_text(UNDER_DEVLOPING_MESSAGE)
-        return  # Stop further processing for quantitative
 
     keyboard = []
     if quiz_type == "quantitative":  # Only show subcategories for Quantitative

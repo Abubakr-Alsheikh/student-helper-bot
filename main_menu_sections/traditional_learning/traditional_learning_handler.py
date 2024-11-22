@@ -4,6 +4,7 @@ from telegram.ext import CallbackContext
 from telegram.error import BadRequest
 from config import UNDER_DEVLOPING_MESSAGE
 from main_menu_sections.traditional_learning.generating_materials import generate_material_pdf, generate_material_text, generate_material_video
+from utils.section_manager import section_manager
 from utils.category_mangement import (
     get_main_categories_by_subcategory,
     get_material_path,
@@ -16,6 +17,13 @@ from utils.subscription_management import check_subscription
 
 async def handle_traditional_learning(update: Update, context: CallbackContext):
     """Handles the 'التعلم بالطريقة التقليدية' option."""
+    query = update.callback_query
+    await query.answer()
+    section_path = query.data
+    # Check section availability
+    if not section_manager.is_section_available(section_path):
+        await query.message.reply_text(section_manager.get_section_message(section_path))
+        return
 
     if not await check_subscription(update, context):
         return
@@ -42,8 +50,16 @@ async def handle_traditional_learning_type(update: Update, context: CallbackCont
     """Handles the question type selection (verbal/quantitative)."""
     query = update.callback_query
     await query.answer()
-    _, question_type = query.data.split(":")
+    section_path = query.data
+
+    # Check section availability
+    if not section_manager.is_section_available(section_path):
+        await query.message.reply_text(section_manager.get_section_message(section_path))
+        return
+
+    question_type = section_path.split(":")[-1]
     context.user_data["question_type"] = question_type
+
     if question_type == "quantitative":
         await query.message.reply_text(UNDER_DEVLOPING_MESSAGE)
         return  # Stop further processing for quantitative

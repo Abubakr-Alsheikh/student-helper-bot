@@ -22,6 +22,7 @@ from handlers.main_menu_handler import main_menu_handler
 from handlers.personal_assistant_chat_handler import chatgpt, SYSTEM_MESSAGE
 from template_maker.generate_files import generate_quiz_pdf, generate_quiz_video
 from utils import database
+from utils.section_manager import section_manager
 from utils.database import (
     execute_query,
     get_data,
@@ -59,6 +60,13 @@ executor = ThreadPoolExecutor(
 
 async def handle_level_determination(update: Update, context: CallbackContext):
     """Handles the 'تحديد المستوى' option and displays its sub-menu."""
+    query = update.callback_query
+    await query.answer()
+    section_path = query.data
+    # Check section availability
+    if not section_manager.is_section_available(section_path):
+        await query.message.reply_text(section_manager.get_section_message(section_path))
+        return
 
     if not await check_subscription(update, context):
         return
@@ -95,13 +103,16 @@ async def handle_quiz_type_choice(update: Update, context: CallbackContext):
     """Handles the choice of quiz type."""
     query = update.callback_query
     await query.answer()
+    section_path = query.data
+
+    # Check section availability
+    if not section_manager.is_section_available(section_path):
+        await query.message.reply_text(section_manager.get_section_message(section_path))
+        return
+
     try:
         _, quiz_type = query.data.split(":")
         context.user_data["level_quiz_type"] = quiz_type
-
-        if quiz_type == "quantitative":
-            await query.message.reply_text(UNDER_DEVLOPING_MESSAGE)
-            return  # Stop further processing for quantitative
 
         # Proceed to the input type selection:
         keyboard = [

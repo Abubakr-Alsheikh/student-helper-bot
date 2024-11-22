@@ -26,6 +26,7 @@ from handlers.main_menu_handler import (
 )
 
 from utils.subscription_management import check_subscription
+from utils.section_manager import section_manager
 
 
 # States for ConversationHandler
@@ -40,6 +41,13 @@ logger = logging.getLogger(__name__)
 
 async def start_design(update: Update, context: CallbackContext):
     """Starts the design process."""
+    query = update.callback_query
+    await query.answer()
+    section_path = query.data
+    # Check section availability
+    if not section_manager.is_section_available(section_path):
+        await query.message.reply_text(section_manager.get_section_message(section_path))
+        return
 
     if not await check_subscription(update, context):
         return

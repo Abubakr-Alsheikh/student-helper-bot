@@ -18,6 +18,7 @@ from config import (
 )
 from handlers.personal_assistant_chat_handler import SYSTEM_MESSAGE
 from utils.subscription_management import check_subscription
+from utils.section_manager import section_manager
 from .keyboards import (
     get_tips_and_strategies_keyboard,
     get_general_advice_keyboard,
@@ -33,6 +34,13 @@ from .solution_strategies_model import SolutionStrategiesModel
 
 async def handle_tips_and_strategies(update: Update, context: CallbackContext):
     """Handles the 'نصائح واستراتيجيات' option and displays its sub-menu."""
+    query = update.callback_query
+    await query.answer()
+    section_path = query.data
+    # Check section availability
+    if not section_manager.is_section_available(section_path):
+        await query.message.reply_text(section_manager.get_section_message(section_path))
+        return
 
     if not await check_subscription(update, context):
         return

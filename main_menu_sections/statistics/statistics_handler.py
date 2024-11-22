@@ -8,10 +8,18 @@ import matplotlib.dates as mdates
 import arabic_reshaper
 from bidi.algorithm import get_display
 from utils.database import get_data
+from utils.section_manager import section_manager
 
 
 async def handle_statistics(update: Update, context: CallbackContext):
     """Handles the 'الإحصائيات' option and displays its sub-menu."""
+    query = update.callback_query
+    await query.answer()
+    section_path = query.data
+    # Check section availability
+    if not section_manager.is_section_available(section_path):
+        await query.message.reply_text(section_manager.get_section_message(section_path))
+        return
     context.user_data["current_section"] = "statistics"  # Set user context
     keyboard = [
         [
