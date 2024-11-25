@@ -125,7 +125,6 @@ FILE_CATEGORIES = {
 }
 
 
-
 class AdminBot:
     def __init__(self, bot_token):
         self.bot_token = bot_token
@@ -139,7 +138,7 @@ class AdminBot:
     async def check_password(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Checks the admin password."""
         if update.message.text == ADMIN_PASSWORD:
-            await update.message.reply_text("تم تسجيل الدخول بنجاح! اختر تصنيفًا:")
+            await update.message.reply_text("تم تسجيل الدخول بنجاح!")
             return await self.show_main_menu(update, context)
         else:
             await update.message.reply_text("كلمة مرور غير صحيحة. تم رفض الوصول.")
@@ -185,12 +184,12 @@ class AdminBot:
         query = update.callback_query
         await query.answer()
         if not query.data.startswith(CAT_PREFIX):
-            return MAIN_MENU #Handles unexpected data
+            return MAIN_MENU
 
         category = query.data[len(CAT_PREFIX):]
         category_data = self.file_categories.get(category)
         if not category_data:
-            await query.edit_message_text("Invalid category selected.")
+            await query.edit_message_text("تم اختيار تصنيف غير صالح.")
             return MAIN_MENU
 
         keyboard = []
@@ -223,10 +222,10 @@ class AdminBot:
                     os.remove(zip_path)
                     return await self.show_main_menu(update, context)
                 else:
-                    await query.edit_message_text("Folder not found.")
+                    await query.edit_message_text("لم يتم العثور على المجلد.")
                     return MAIN_MENU
             else:
-                await query.edit_message_text("Invalid folder configuration.")
+                await query.edit_message_text("تهيئة المجلد غير صالحة.")
                 return MAIN_MENU
         return MAIN_MENU
 
@@ -237,26 +236,26 @@ class AdminBot:
 
         if query.data == "MAIN_MENU":
             return await self.show_main_menu(update, context)
-        print(query.data)
-        parts = query.data.split(":", 2)  # Split into at most 3 parts
 
-        if len(parts) != 3:  # Check if you have enough parts
-            await query.edit_message_text("Invalid selection data format.")
-            return MAIN_MENU  # Handle the error gracefully
+        parts = query.data.split(":", 2)
+
+        if len(parts) != 3:
+            await query.edit_message_text("تنسيق بيانات الاختيار غير صالح.")
+            return MAIN_MENU
 
         prefix, category, item_name = parts
 
-        if prefix == FILE_PREFIX[:len(FILE_PREFIX)-1]: #Adjusted comparison
+        if prefix == FILE_PREFIX[:len(FILE_PREFIX)-1]:
             current_prefix = FILE_PREFIX
-        elif prefix == FOLDER_PREFIX[:len(FOLDER_PREFIX)-1]: #Adjusted comparison
+        elif prefix == FOLDER_PREFIX[:len(FOLDER_PREFIX)-1]:
             current_prefix = FOLDER_PREFIX
         else:
-            await query.edit_message_text("Invalid selection prefix.")
+            await query.edit_message_text("بادئة الاختيار غير صالحة.")
             return MAIN_MENU
 
         category_data = self.file_categories.get(category)
         if not category_data:
-            await query.edit_message_text("Invalid category selected.")
+            await query.edit_message_text("تم اختيار تصنيف غير صالح.")
             return MAIN_MENU
 
         for item in category_data["items"]:
@@ -298,7 +297,7 @@ class AdminBot:
             if os.path.exists(path):
                 await query.message.reply_document(document=open(path, "rb"))
             else:
-                await query.edit_message_text("File not found.")
+                await query.edit_message_text("لم يتم العثور على الملف.")
         elif query.data.startswith(DOWNLOAD_FOLDER_PREFIX):
             path = query.data[len(DOWNLOAD_FOLDER_PREFIX):]
             if os.path.exists(path):
@@ -307,7 +306,7 @@ class AdminBot:
                 await query.message.reply_document(document=open(zip_path, "rb"))
                 os.remove(zip_path)
             else:
-                await query.edit_message_text("Folder not found.")
+                await query.edit_message_text("لم يتم العثور على المجلد.")
 
 
     async def handle_replace(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -321,27 +320,27 @@ class AdminBot:
             path = query.data[len(REPLACE_FOLDER_PREFIX):]
             action_type = "REPLACE_FOLDER"
         else:
-            await query.edit_message_text("Invalid action.")
+            await query.edit_message_text("إجراء غير صالح.")
             return MAIN_MENU
 
         context.user_data["action_type"] = action_type
         context.user_data["current_path"] = path
         if action_type == "REPLACE_FILE":
-            await query.edit_message_text("Please upload the new file to replace.")
+            await query.edit_message_text("يرجى تحميل الملف الجديد للاستبدال.")
         else:
-            await query.edit_message_text("Please upload a ZIP file containing the new folder contents.")
+            await query.edit_message_text("يرجى تحميل ملف مضغوط يحتوي على محتويات المجلد الجديد.")
         return FILE_ACTION if action_type == "REPLACE_FILE" else FOLDER_ACTION
 
     async def handle_upload(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.message.document:
-            await update.message.reply_text("Please upload a valid file.")
+            await update.message.reply_text("يرجى تحميل ملف صالح.")
             return context.user_data.get("action_type", FILE_ACTION)
 
         path = context.user_data.get("current_path")
         action_type = context.user_data.get("action_type")
 
         if not path or not action_type:
-            await update.message.reply_text("Session expired. Please start over.")
+            await update.message.reply_text("انتهت الجلسة. يرجى البدء من جديد.")
             return ConversationHandler.END
 
         new_file = await update.message.document.get_file()
@@ -349,23 +348,23 @@ class AdminBot:
         try:
             if action_type == "REPLACE_FILE":
                 await new_file.download_to_drive(path)
-                await update.message.reply_text("File successfully replaced!")
+                await update.message.reply_text("تم استبدال الملف بنجاح!")
             elif action_type == "REPLACE_FOLDER":
                 temp_zip = f"{path}_temp.zip"
                 await new_file.download_to_drive(temp_zip)
                 self._extract_zip(temp_zip, path)
                 os.remove(temp_zip)
-                await update.message.reply_text("Folder contents successfully replaced!")
+                await update.message.reply_text("تم استبدال محتويات المجلد بنجاح!")
             else:
-                await update.message.reply_text("Invalid action type.")
+                await update.message.reply_text("نوع الإجراء غير صالح.")
         except Exception as e:
             logger.error(f"Error during replacement: {e}")
-            await update.message.reply_text("An error occurred during replacement.")
+            await update.message.reply_text("حدث خطأ أثناء الاستبدال.")
 
         return await self.show_main_menu(update, context)
 
     async def set_commands(self, application: Application) -> None:
-        commands = [BotCommand("start", "Start the bot")]
+        commands = [BotCommand("start", "تسجيل الدخول")]
         await application.bot.set_my_commands(commands)
 
     def build_application(self) -> Application:
@@ -395,6 +394,7 @@ class AdminBot:
 
         application.add_handler(conv_handler)
         return application
+
 
 def main():
     admin_bot = AdminBot(bot_token=BOT_TOKEN)
