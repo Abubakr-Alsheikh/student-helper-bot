@@ -610,6 +610,15 @@ async def handle_output_format_choice(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     level_determination_id = context.user_data["level_determination_id"]
 
+    test_number = database.get_data(
+            """
+            SELECT COUNT(*) 
+            FROM level_determinations 
+            WHERE user_id = ? AND id <= ?
+            """,
+            (user_id, level_determination_id),
+        )[0][0]
+
     pdf_filepath = None
     video_filepath = None
 
@@ -619,7 +628,7 @@ async def handle_output_format_choice(update: Update, context: CallbackContext):
         )
 
         pdf_filepath = await generate_quiz_pdf(
-            questions, user_id, "level_determination", str(start_time), level_determination_id
+            questions, user_id, "level_determination", str(start_time), test_number
         )
 
         if pdf_filepath is None:  # Check if PDF generation failed
@@ -638,7 +647,7 @@ async def handle_output_format_choice(update: Update, context: CallbackContext):
     elif output_format == "video":  # Future implementation
         await update.effective_message.reply_text("جاري إنشاء الفيديو... 🎬")
         video_filepath = await generate_quiz_video(
-            questions, user_id, "level_determination", str(start_time), level_determination_id
+            questions, user_id, "level_determination", str(start_time), test_number
         )
 
         if (
