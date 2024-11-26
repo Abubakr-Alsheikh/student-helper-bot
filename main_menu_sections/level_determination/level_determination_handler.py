@@ -599,6 +599,8 @@ async def handle_output_format_choice(update: Update, context: CallbackContext):
     await query.answer()
     _, output_format = query.data.split(":")
 
+    await query.message.delete()
+
     end_time = datetime.now()
     start_time = context.user_data["start_time"]
     total_time = (end_time - start_time).total_seconds()
