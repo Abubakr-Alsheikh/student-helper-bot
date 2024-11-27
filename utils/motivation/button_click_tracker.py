@@ -1,6 +1,6 @@
 import random
 from openpyxl import load_workbook
-from telegram import Update
+from telegram import CallbackQuery, Update
 from telegram.ext import CallbackContext
 from config import (
     FEMALE_GO_BACK_MESSAGES_FILE,
@@ -61,12 +61,16 @@ async def send_motivational_message(
     update: Update, context: CallbackContext, called_from
 ):
     """Sends a motivational message to the user and resets the click counter."""
-    # user_id = update.effective_user.id
-
-    if isinstance(update, Update):
+    # Determine if the update is a regular Update or CallbackQuery
+    if hasattr(update, "callback_query"):  # Update containing a CallbackQuery
+        callback_query = update.callback_query
+        user = callback_query.from_user
+    elif isinstance(update, CallbackQuery):  # If it's directly a CallbackQuery
+        callback_query = update
+        user = callback_query.from_user
+    else:  # Fallback for message-based Update
         user = update.effective_user
-    else:  # Assuming it's a CallbackQuery
-        user = update.from_user
+
     user_id = user.id
     gender = get_data("SELECT gender FROM users WHERE telegram_id = ?", (user_id,))[0][
         0
@@ -77,10 +81,13 @@ async def send_motivational_message(
         # username = user.username
         username = await user_management.get_user_name(user_id)
         message = message.replace("(اسم المستخدم)", username)
-        if isinstance(update, Update):
+
+        if hasattr(update, "message") and update.message:  # Regular message update
             await update.message.reply_text(message)
-        else:
-            await update.message.reply_text(message)
+        elif callback_query and callback_query.message:  # Handle CallbackQuery's message
+            await callback_query.message.reply_text(message)
+            await callback_query.answer()  # Acknowledge the button press
+
     context.user_data["button_clicks"] = 0
 
 
