@@ -166,3 +166,54 @@ def convert_pptx_to_mp4(pptx_path, mp4_path, fps=0.5, dpi=300, image_format="png
             print(f"Video saved as {mp4_path}")
 
         # Temporary files (PDF and images) are automatically deleted with temp_dir
+
+
+async def convert_ppt_to_image(ppt_file_path, img_path, dpi=300, image_format="png"):
+    """
+    Converts a PPTX file to an image.
+    """
+    try:
+        # Step 1: Convert PPTX to PDF using LibreOffice asynchronously
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_filename = os.path.splitext(os.path.basename(ppt_file_path))[0] + ".pdf"
+            pdf_path = os.path.join(temp_dir, pdf_filename)
+
+            if platform.system() == "Windows":
+                soffice_path = r"C:\Program Files\LibreOffice\program\soffice"
+            else:
+                soffice_path = "libreoffice"
+            # Run the LibreOffice command asynchronously
+            cmd = [
+                soffice_path,
+                "--headless",
+                "--invisible",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                temp_dir,
+                ppt_file_path,
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0 or not os.path.exists(pdf_path):
+                raise FileNotFoundError(f"PDF conversion failed: {stderr.decode()}")
+
+            if platform.system() == "Windows":
+                # Step 2: Convert PDF to images asynchronously
+                images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format, poppler_path=r"C:\poppler-24.08.0\Library\bin")
+            else:
+                images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format)
+
+
+            # Save the first page as the image for simplicity
+            images[0].save(img_path, image_format.upper())
+
+            return img_path
+
+    except Exception as e:
+        logger.error(f"Error converting PPTX to image: {e}")
+        raise

@@ -1,22 +1,16 @@
 import asyncio
-import io
 import datetime
-import platform
 from typing import Tuple
 import uuid
 import logging
 import os
 import openpyxl
-from PIL import Image
 from pptx import Presentation
 import aiohttp
 from config import DESIGNS_FOR_FEMALE_FILE, DESIGNS_FOR_MALE_FILE
+from template_maker.file_exports import convert_ppt_to_image
 from utils.database import execute_query, get_data
 from utils.user_management import get_user_data
-import tempfile
-from pdf2image import convert_from_path
-import os
-import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +37,8 @@ async def process_powerpoint_design(ppt_file, user_name):
         for slide in prs.slides:
             for shape in slide.shapes:
                 if shape.has_text_frame:
-                    if shape.text.find("Your Name") != -1:
-                        shape.text = shape.text.replace("Your Name", user_name)
+                    if shape.text.find("(username)") != -1:
+                        shape.text = shape.text.replace("(username)", user_name)
         modified_ppt = f"temp_{user_name}.pptx"
         prs.save(modified_ppt)
 
@@ -55,57 +49,6 @@ async def process_powerpoint_design(ppt_file, user_name):
         return image_path
     except Exception as e:
         logger.error(f"Error processing PowerPoint design: {e}")
-        raise
-
-
-async def convert_ppt_to_image(ppt_file_path, img_path, dpi=300, image_format="png"):
-    """
-    Converts a PPTX file to an image.
-    """
-    try:
-        # Step 1: Convert PPTX to PDF using LibreOffice asynchronously
-        with tempfile.TemporaryDirectory() as temp_dir:
-            pdf_filename = os.path.splitext(os.path.basename(ppt_file_path))[0] + ".pdf"
-            pdf_path = os.path.join(temp_dir, pdf_filename)
-
-            if platform.system() == "Windows":
-                soffice_path = r"C:\Program Files\LibreOffice\program\soffice"
-            else:
-                soffice_path = "libreoffice"
-            # Run the LibreOffice command asynchronously
-            cmd = [
-                soffice_path,
-                "--headless",
-                "--invisible",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                temp_dir,
-                ppt_file_path,
-            ]
-
-            process = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
-
-            if process.returncode != 0 or not os.path.exists(pdf_path):
-                raise FileNotFoundError(f"PDF conversion failed: {stderr.decode()}")
-
-            if platform.system() == "Windows":
-                # Step 2: Convert PDF to images asynchronously
-                images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format, poppler_path=r"C:\poppler-24.08.0\Library\bin")
-            else:
-                images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format)
-
-
-            # Save the first page as the image for simplicity
-            images[0].save(img_path, image_format.upper())
-
-            return img_path
-
-    except Exception as e:
-        logger.error(f"Error converting PPTX to image: {e}")
         raise
 
 
