@@ -27,6 +27,7 @@ from handlers.main_menu_handler import (
 
 from utils.subscription_management import check_subscription
 from utils.section_manager import section_manager
+from utils.user_management import get_user_name
 
 
 # States for ConversationHandler
@@ -155,7 +156,7 @@ async def handle_design_selection(update: Update, context):
 
         try:
             await query.edit_message_text("جاري معالجة التصميم... ⚙️")
-            image_path = await process_powerpoint_design( design_path, update.effective_user.first_name, )
+            image_path = await process_powerpoint_design( design_path, await get_user_name(update.effective_user.id))
 
             with open(image_path, "rb") as image_file:
                 await context.bot.send_photo(
