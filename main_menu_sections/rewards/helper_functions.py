@@ -2,7 +2,11 @@
 from datetime import datetime
 import logging
 import os
+import re
 
+from pptx import Presentation
+
+from template_maker.file_exports import convert_ppt_to_image
 from utils.database import execute_query, get_data
 
 
@@ -49,6 +53,53 @@ async def increment_user_daily_gifts_used(user_id):
         (datetime.now().strftime("%Y-%m-%d"), user_id),
     )
 
+async def process_ppt_design_user_data(ppt_file, user_data):
+    try:
+        prs = Presentation(ppt_file)
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for paragraph in shape.text_frame.paragraphs:
+                        for run in paragraph.runs:
+                            text = run.text
+                            placeholders = re.findall(r"\((.*?)\)", text)
+                            for placeholder in placeholders:
+                                if placeholder in user_data:
+                                    replacement_text = user_data[placeholder]
+
+                                    # Preserve formatting: Replace run text directly
+                                    run.text = text.replace(f"({placeholder})", replacement_text)
+
+        modified_ppt = f"temp/temp_{user_data.get('telegram_id', 'user')}.pptx"
+        prs.save(modified_ppt)
+
+        image_path = f"temp/temp_{user_data.get('telegram_id', 'user')}.png"
+        await convert_ppt_to_image(modified_ppt, image_path)
+
+        os.remove(modified_ppt)
+        return image_path
+    except Exception as e:
+        logger.error(f"Error processing PowerPoint design: {e}")
+        raise
+
+def get_user_custom_data(user_id):
+    query = """
+        SELECT name, phone_number, email, custom_text
+        FROM user_customizations
+        WHERE telegram_id = ?
+    """
+    result = get_data(query, (user_id,))
+    if result:
+        name, phone_number, email, custom_text = result[0]
+        return {"telegram_id": user_id, "name": name, "phone_number": phone_number, "email": email, "custom_text": custom_text}
+    else:
+        query = "SELECT name FROM users WHERE telegram_id = ?"
+        result = get_data(query, (user_id,))
+        if result:
+            name = result[0][0]
+            return {"telegram_id": user_id, "name": name, "phone_number": "", "email": "", "custom_text": ""}
+        else:
+            return {"telegram_id": user_id}
 
 async def get_user_stats(user_id):
     """Fetches and formats user statistics from the database."""
@@ -120,3 +171,37 @@ def format_no_rewards_text(user_stats):
         f"✏️ عدد الأسئلة التي قمت بإنشائها: {user_stats['questions_created']}\n\n"
         f"🙅‍♂️ لم تكسب أي مكافآت حتى الآن. استمر في الدراسة!"
     )
+
+
+# --- Validation functions with character limits and user-friendly messages ---
+def validate_name(name):
+    if not name:
+        return "الاسم لا يمكن أن يكون فارغًا."
+    if len(name) < 2:
+        return "الرجاء إدخال اسم صحيح (على الأقل حرفين)."
+    if len(name) > 25:
+        return "الاسم طويل جدًا. يجب أن يكون أقل من 25 حرفًا."
+    return None
+
+def validate_phone(phone):
+    if not phone:
+        return "رقم الهاتف لا يمكن أن يكون فارغًا."
+    if not re.match(r"^\+?[1-9]\d{1,14}$", phone):
+        return "الرجاء إدخال رقم هاتف صحيح (أرقام فقط، بحد أقصى 15 رقمًا)."
+    return None
+
+def validate_email(email):
+    if not email:
+        return "البريد الإلكتروني لا يمكن أن يكون فارغًا."
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        return "الرجاء إدخال بريد إلكتروني صحيح."
+    if len(email) > 100:
+       return "البريد الإلكتروني طويل جدًا. يجب أن يكون أقل من 100 حرفًا."
+    return None
+
+def validate_custom_text(text):
+    if not text:
+        return "النص لا يمكن أن يكون فارغًا."
+    if len(text) > 200:
+        return "النص طويل جدًا. يجب أن يكون أقل من 200 حرفًا."
+    return None

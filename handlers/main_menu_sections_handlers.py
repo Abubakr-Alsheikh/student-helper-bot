@@ -37,7 +37,7 @@ from main_menu_sections.subscription.subscription_handler import (
     SUBSCRIPTION_HANDLERS,
     subscription_conv_handler,
 )
-from main_menu_sections.rewards.rewards_handler import REWARDS_HANDLERS
+from main_menu_sections.rewards.rewards_handler import REWARDS_HANDLERS, customize_conversation
 from main_menu_sections.design_for_you.design_for_you import (
     register_design_handlers,
 )
@@ -75,6 +75,7 @@ CONVERSATION_HANDLERS = {
     test_conv_ai_assistance_handler,
     conversation_learning_conv_handler,
     tips_and_strategies_conv_handler,
+    customize_conversation
 }
 
 def register_all_main_menu_handlers(application: Application):

@@ -56,6 +56,21 @@ def create_tables(update: Update = None, context: CallbackContext = None):
         )
     """
     )
+    
+    # User Customizations Table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_customizations (
+            telegram_id INTEGER PRIMARY KEY,
+            name TEXT,
+            phone_number TEXT,
+            email TEXT,
+            custom_text TEXT,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
+        );
+    """
+    )
 
     # ai_image_usage Table
     cursor.execute(
@@ -252,7 +267,8 @@ def execute_query(query, params=None, commit=True, fetch_all=False, fetch_one=Fa
             result = cursor.fetchone() 
         description = cursor.description # Fetch description here
     except sqlite3.Error as e:
-        print(e)
+        print(f"Database error: {e}")
+        return None, None # Return None, None on error
     finally:
         conn.close()
     return result, description  # Return both the result and the description
