@@ -42,6 +42,15 @@ REPLACE_FOLDER_PREFIX = "REPLACE_FOLDER:"
 
 # Define file categories structure
 FILE_CATEGORIES = {
+    'serial_codes': {
+        "type": "files",
+        "arabic_name": "الأكواد التسلسلية",
+        "items": [
+            ("serial 1 month", "الأكواد شهر الواحد", config.SERIAL_CODES_1_MONTH),
+            ("serial 3 month", "الأكواد ثلاثة شهور", config.SERIAL_CODES_3_MONTH),
+            ("serial 1 year", "الأكواد سننة الواحد", config.SERIAL_CODES_1_YEAR),
+        ]
+    },
     'welcoming': {
         "type": "files",
         "arabic_name": "قسم الترحيب",

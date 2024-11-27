@@ -23,6 +23,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # ----------------
+SERIAL_CODES_FOLDER = "serial_codes"
+SERIAL_CODES_1_MONTH = os.path.join(SERIAL_CODES_FOLDER, "serial_codes_1month.xlsx")
+SERIAL_CODES_3_MONTH = os.path.join(SERIAL_CODES_FOLDER, "serial_codes_3months.xlsx")
+SERIAL_CODES_1_YEAR = os.path.join(SERIAL_CODES_FOLDER, "serial_codes_1year.xlsx")
+
 # Main files directory
 MAIN_FILES = "Main Files"
 
