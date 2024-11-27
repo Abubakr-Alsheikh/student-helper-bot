@@ -77,13 +77,21 @@ async def main_menu_handler(update_or_query, context: CallbackContext):
         )
 
     if isinstance(update_or_query, Update):
-        await track_button_clicks(
-            update_or_query, context, called_from="main_menu"
-        )  # Track clicks for motivational messages
+    # Track clicks for motivational messages
+        await track_button_clicks(update_or_query, context, called_from="main_menu")
 
-        await update_or_query.message.reply_text(
-            main_menu_message, reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        # Determine whether the update is a message or callback query
+        if update_or_query.message:  # Regular message update
+            await update_or_query.message.reply_text(
+                main_menu_message, reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        elif update_or_query.callback_query:  # Button press (CallbackQuery)
+            # Respond via callback query's associated message
+            await update_or_query.callback_query.message.reply_text(
+                main_menu_message, reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            # Optionally acknowledge the callback query to avoid client-side loading icons
+            await update_or_query.callback_query.answer()
     else:
         if update_or_query.data == "go_back":
             await track_button_clicks(
