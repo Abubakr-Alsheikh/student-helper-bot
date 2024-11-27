@@ -120,7 +120,7 @@ Q_AND_A_FILE_PATH = os.path.join(WORD_FOLDER_PATH, "Q&A.docx")
 # Power Point Files
 POWERPOINT_FOLDER_PATH = os.path.join(TEMPLATE_FILES_DIRECTORY, "Powerpoint")
 POWERPOINT_MAIN_PATH = os.path.join(POWERPOINT_FOLDER_PATH, "Main.pptx")
-
+Q_AND_A_FILE_PATH_POWERPOINT = os.path.join(POWERPOINT_FOLDER_PATH, "Q&A.pptx")
 
 # ----------------
 # Moivation messages directory
