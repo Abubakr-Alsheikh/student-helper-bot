@@ -37,8 +37,8 @@ async def process_powerpoint_design(ppt_file, user_name):
         for slide in prs.slides:
             for shape in slide.shapes:
                 if shape.has_text_frame:
-                    if shape.text.find("(username)") != -1:
-                        shape.text = shape.text.replace("(username)", user_name)
+                    if shape.text.find("(name)") != -1:
+                        shape.text = shape.text.replace("(name)", user_name)
         modified_ppt = f"temp_{user_name}.pptx"
         prs.save(modified_ppt)
 
