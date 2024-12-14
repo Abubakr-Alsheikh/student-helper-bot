@@ -148,6 +148,17 @@ async def generate_powerpoint(template_path, output_path, quiz_data):
                                 paragraph.runs[0].text = question["CorrectAnswer"]
                             if "Explanation" == paragraph.text and j == 3:
                                 paragraph.runs[0].text = question["Explanation"]
+                
+                source_xml = source_slide._element
+                new_xml = new_slide._element
+                source_transition = source_xml.find('.//{http://schemas.openxmlformats.org/presentationml/2006/main}transition')
+                if source_transition is not None:
+                    # Remove existing transition in the new slide
+                    existing_transition = new_xml.find('.//{http://schemas.openxmlformats.org/presentationml/2006/main}transition')
+                    if existing_transition is not None:
+                        new_xml.remove(existing_transition)
+                    # Copy the transition from the source slide
+                    new_xml.append(copy.deepcopy(source_transition))
 
         # Remove the original template slides
         for i in range(4):
