@@ -133,7 +133,7 @@ async def generate_quiz_pdf(
 async def generate_quiz_video(
     questions, user_id, which_quiz, quiz_timestamp, quiz_number, category_name=None
 ) -> str:  # Or None if it fails
-    """Placeholder function for video generation.  Implement your video logic here."""
+    """Placeholder function for video generation."""
 
     try:
         base_dir = "user_tests"
@@ -216,10 +216,7 @@ async def generate_quiz_video(
             return None
 
         try:
-            if platform.system() == "Windows" and False:
-                convert_pptx_to_mp4_with_windows(powerpoint_filename, video_filename)
-            else:
-                await convert_pptx_to_mp4(powerpoint_filename, video_filename)
+            await convert_pptx_to_mp4(powerpoint_filename, video_filename)
         except Exception as e:
             logger.error(f"Error converting to Video: {e}")
             return None

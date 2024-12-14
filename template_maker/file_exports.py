@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import logging
 import platform
 import shutil
@@ -19,6 +20,7 @@ if platform.system() == "Windows":
 
 logger = logging.getLogger(__name__)
 
+
 async def generate_word_doc(template_path, output_path, quiz_data):
     """Generates the Word document."""
     try:
@@ -28,6 +30,7 @@ async def generate_word_doc(template_path, output_path, quiz_data):
     except Exception as e:
         logger.error(f"Error generating Word document: {e}")
         raise
+
 
 async def merge_word_documents(main_doc_path, q_and_a_doc_path, output_path):
     """Merges the Main and Q\&A Word documents into a single document."""
@@ -44,6 +47,7 @@ async def merge_word_documents(main_doc_path, q_and_a_doc_path, output_path):
     except Exception as e:
         logger.error(f"Error merging Word documents: {e}")
         raise
+
 
 async def convert_docx_to_pdf(word_file, pdf_file=None):
     # Set default output name if pdf_file is not specified
@@ -63,14 +67,14 @@ async def convert_docx_to_pdf(word_file, pdf_file=None):
     # Run the LibreOffice command to convert to PDF in temp directory
     try:
         proc = await asyncio.create_subprocess_exec(
-                soffice_path,
-                "--headless",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                temp_dir, # Use absolute path
-                word_file, # Use absolute path
-            )
+            soffice_path,
+            "--headless",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            temp_dir,  # Use absolute path
+            word_file,  # Use absolute path
+        )
         await proc.communicate()
     except subprocess.CalledProcessError as e:
         logger.error(f"LibreOffice conversion failed: {e}")
@@ -90,71 +94,76 @@ async def convert_docx_to_pdf(word_file, pdf_file=None):
         raise FileNotFoundError("PDF conversion failed.")
 
 
+
 async def generate_powerpoint(template_path, output_path, quiz_data):
     """
-    Generates the PowerPoint presentation by duplicating the first four slides and replacing placeholders with data.
-    
+    Generates a PowerPoint presentation based on the provided quiz data,
+    preserving all formatting from the template.
+
     Args:
-        template_path (str): Path to the PowerPoint template file.
-        output_path (str): Path to save the generated PowerPoint file.
-        quiz_data (dict): Data containing the questions and related details.
+        template_path: Path to the PowerPoint template file.
+        output_path: Path to save the generated PowerPoint file.
+        quiz_data: A dictionary containing quiz data, including a list of questions.
     """
     try:
-        # Load the PowerPoint template
-        template_prs = Presentation(template_path)
+        prs = Presentation(template_path)
+        questions = quiz_data["questions"]
 
-        # Create a new presentation
-        new_prs = Presentation()
+        for i, question in enumerate(questions):
+            # Duplicate the first four slides for each question
+            for j in range(4):
+                source_slide = prs.slides[j]
+                slide_layout = source_slide.slide_layout
+                new_slide = prs.slides.add_slide(slide_layout)
 
-        # Get the first four slides from the template
-        template_slides = [template_prs.slides[i] for i in range(min(4, len(template_prs.slides)))]
+                # Copy shapes (including their formatting and content)
+                for shape in source_slide.shapes:
+                    el = shape.element
+                    new_el = copy.deepcopy(el)
+                    new_slide.shapes._spTree.insert_element_before(new_el, "p:extLst")
+                    new_slide.background.fill.solid()
+                    source_slide.background.fill.solid()
+                    new_slide.background.fill.fore_color.rgb = source_slide.background.fill.fore_color.rgb
 
-        # Add slides for each question using the first 4 slides as templates
-        for question_index, question in enumerate(quiz_data["questions"]):
-            # Cycle through the 4 template slides
-            template_slide = template_slides[question_index % 4]
+                # Replace placeholders in the new slide (text only)
+                for shape in new_slide.shapes:
+                    if shape.has_text_frame:
+                        for paragraph in shape.text_frame.paragraphs:
+                            if "QuestionNumber" == paragraph.text:
+                                paragraph.runs[0].text = str(question["QuestionNumber"])
+                            if "MainCategoryName" == paragraph.text:
+                                paragraph.runs[0].text = question["MainCategoryName"]
+                            if "QuestionText" == paragraph.text and j == 0:
+                                paragraph.runs[0].text = question["QuestionText"]
+                            # ... (similarly for other placeholders)
+                            if "OptionA" == paragraph.text and j == 2:
+                                paragraph.runs[0].text = question["OptionA"]
+                            if "OptionB" == paragraph.text and j == 2:
+                                paragraph.runs[0].text = question["OptionB"]
+                            if "OptionC" == paragraph.text and j == 2:
+                                paragraph.runs[0].text = question["OptionC"]
+                            if "OptionD" == paragraph.text and j == 2:
+                                paragraph.runs[0].text = question["OptionD"]
+                            if "CorrectAnswer" == paragraph.text and j == 3:
+                                paragraph.runs[0].text = question["CorrectAnswer"]
+                            if "Explanation" == paragraph.text and j == 3:
+                                paragraph.runs[0].text = question["Explanation"]
 
-            # Duplicate the slide
-            slide = new_prs.slides.add_slide(template_slide.slide_layout)
+        # Remove the original template slides
+        for i in range(4):
+            rId = prs.slides._sldIdLst[0].rId
+            prs.part.drop_rel(rId)
+            del prs.slides._sldIdLst[0]
 
-            # Copy content from the template slide to the new slide
-            for shape in template_slide.shapes:
-                if shape.is_placeholder:
-                    print(f"Placeholder name: {shape.name}, type: {shape.placeholder_format.type}")
-                    try:
-                        # Replace placeholders with actual content
-                        placeholder_name = shape.text_frame.text
-                        if "QuestionNumber" in placeholder_name:
-                            shape.text_frame.text = str(question["QuestionNumber"])
-                        elif "QuestionText" in placeholder_name:
-                            shape.text_frame.text = question["QuestionText"]
-                        elif "MainCategoryName" in placeholder_name:
-                            shape.text_frame.text = question["MainCategoryName"]
-                        elif "OptionA" in placeholder_name:
-                            shape.text_frame.text = question["OptionA"]
-                        elif "OptionB" in placeholder_name:
-                            shape.text_frame.text = question["OptionB"]
-                        elif "OptionC" in placeholder_name:
-                            shape.text_frame.text = question["OptionC"]
-                        elif "OptionD" in placeholder_name:
-                            shape.text_frame.text = question["OptionD"]
-                        elif "CorrectAnswer" in placeholder_name:
-                            shape.text_frame.text = question["CorrectAnswer"]
-                        elif "Explanation" in placeholder_name:
-                            shape.text_frame.text = question["Explanation"]
-                    except AttributeError:
-                        # Handle shapes without text_frame (e.g., images or other elements)
-                        continue
-
-        # Save the modified PowerPoint presentation
-        new_prs.save(output_path)
+        prs.save(output_path)
 
     except Exception as e:
-        logger.error(f"Error generating PowerPoint: {e}")
+        print(f"Error in generate_powerpoint: {e}")
         raise
 
-
-async def convert_pptx_to_mp4(pptx_path, mp4_path, fps=0.5, dpi=300, image_format="png"):
+async def convert_pptx_to_mp4(
+    pptx_path, mp4_path, fps=0.5, dpi=300, image_format="png"
+):
     """
     Converts a PPTX file to an MP4 video by first converting it to a PDF,
     then converting each PDF page to an image, and finally combining
@@ -199,9 +208,17 @@ async def convert_pptx_to_mp4(pptx_path, mp4_path, fps=0.5, dpi=300, image_forma
         # Step 2: Convert PDF to images
         if platform.system() == "Windows":
             # Step 2: Convert PDF to images asynchronously
-            images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format, poppler_path=r"C:\poppler-24.08.0\Library\bin")
+            images = await asyncio.to_thread(
+                convert_from_path,
+                pdf_path,
+                dpi=dpi,
+                fmt=image_format,
+                poppler_path=r"C:\poppler-24.08.0\Library\bin",
+            )
         else:
-            images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format)
+            images = await asyncio.to_thread(
+                convert_from_path, pdf_path, dpi=dpi, fmt=image_format
+            )
 
         # Step 3: Save images to temporary files
         image_paths = []
@@ -234,9 +251,12 @@ async def convert_pptx_to_mp4(pptx_path, mp4_path, fps=0.5, dpi=300, image_forma
 
     # Temporary files (PDF and images) are automatically deleted with temp_dir
 
-def convert_pptx_to_mp4_with_windows(pptx_path, mp4_path, fps=0.5, dpi=300, image_format="png"):
+
+def convert_pptx_to_mp4_with_windows(
+    pptx_path, mp4_path, fps=0.5, dpi=300, image_format="png"
+):
     try:
-        ppt = win32com.client.Dispatch('PowerPoint.Application')
+        ppt = win32com.client.Dispatch("PowerPoint.Application")
         presentation = ppt.Presentations.Open(pptx_path, WithWindow=False)
         presentation.CreateVideo(mp4_path, -1, 4, 1080, 24, 60)
         start_time_stamp = time.time()
@@ -245,7 +265,7 @@ def convert_pptx_to_mp4_with_windows(pptx_path, mp4_path, fps=0.5, dpi=300, imag
             time.sleep(4)
             try:
                 os.rename(mp4_path, mp4_path)
-                print('Success')
+                print("Success")
                 break
             except Exception as e:
                 print(f"Waiting for video creation: {e}")
@@ -257,6 +277,7 @@ def convert_pptx_to_mp4_with_windows(pptx_path, mp4_path, fps=0.5, dpi=300, imag
 
     except Exception as e:
         print(f"Error in convert_pptx_to_mp4_with_windows: {e}")
+
 
 async def convert_ppt_to_image(ppt_file_path, img_path, dpi=300, image_format="png"):
     """
@@ -294,10 +315,17 @@ async def convert_ppt_to_image(ppt_file_path, img_path, dpi=300, image_format="p
 
             if platform.system() == "Windows":
                 # Step 2: Convert PDF to images asynchronously
-                images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format, poppler_path=r"C:\poppler-24.08.0\Library\bin")
+                images = await asyncio.to_thread(
+                    convert_from_path,
+                    pdf_path,
+                    dpi=dpi,
+                    fmt=image_format,
+                    poppler_path=r"C:\poppler-24.08.0\Library\bin",
+                )
             else:
-                images =  await asyncio.to_thread(convert_from_path,pdf_path, dpi=dpi, fmt=image_format)
-
+                images = await asyncio.to_thread(
+                    convert_from_path, pdf_path, dpi=dpi, fmt=image_format
+                )
 
             # Save the first page as the image for simplicity
             images[0].save(img_path, image_format.upper())
