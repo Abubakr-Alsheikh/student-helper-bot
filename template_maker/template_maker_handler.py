@@ -6,6 +6,7 @@ from telegram.ext import CallbackContext
 from template_maker.content_population import (
     find_expression,
     generate_number,
+    get_student_phone_number,
     replace_placeholders_in_powerpoint,
     replace_placeholders_in_word,
 )
@@ -15,6 +16,7 @@ from template_maker.data_preparation import (
 )
 from template_maker.file_exports import convert_docx_to_pdf, convert_pptx_to_mp4
 from template_maker.q_and_a_update import q_and_a_document
+from utils.user_management import get_user_name
 
 
 def sanitize_folder_name(name):
@@ -57,8 +59,8 @@ def create_folder_structure(df):
                     expression_number = find_expression(number)
 
                     data = {
-                        "studentName": "someone",
-                        "number": number,
+                        "studentName": get_user_name(user_id),
+                        "phoneNumber": get_student_phone_number(user_id),
                         "expressionNumber": expression_number,
                         "modelNumber": model_number,
                         "date": datetime.today().strftime("%Y-%m-%d %H:%M:%S"),

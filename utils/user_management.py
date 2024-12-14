@@ -191,6 +191,18 @@ async def get_user_name(user_id):
     result = database.get_data(query, (user_id,))
     return result[0][0] if result else None  # Return the setting value or None
 
+async def get_user_phone_number(telegram_id):
+    """retrieves the student phone number."""
+    result = database.get_data(
+        "SELECT telegram_id FROM users WHERE telegram_id = ?", (telegram_id,)
+    )
+
+    if result:
+        user_phone = result[0][0]
+    else:
+        user_phone = "Unknown Phone"
+
+    return user_phone
 
 async def get_user_for_reminder(user_id):
     """Retrieves a specific setting for a user."""

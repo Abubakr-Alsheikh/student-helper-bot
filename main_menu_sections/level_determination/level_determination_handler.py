@@ -20,6 +20,7 @@ from telegram.ext import (
 from config import CONTEXT_DIRECTORY
 from handlers.main_menu_handler import main_menu_handler
 from handlers.personal_assistant_chat_handler import chatgpt, SYSTEM_MESSAGE
+from template_maker.content_population import find_expression, generate_number
 from template_maker.generate_files import generate_quiz_pdf, generate_quiz_video
 from utils import database
 from utils.section_manager import section_manager
@@ -33,6 +34,8 @@ from utils.subscription_management import check_subscription
 from utils.user_management import (
     calculate_percentage_expected,
     calculate_points,
+    get_user_name,
+    get_user_phone_number,
     update_user_created_questions,
     update_user_percentage_expected,
     update_user_points,
@@ -621,6 +624,19 @@ async def handle_output_format_choice(update: Update, context: CallbackContext):
             (user_id, level_determination_id),
         )[0][0]
 
+    # Collect user data for the Main page
+    number = generate_number()
+    expression_number = find_expression(number)
+    user_data = {
+        "studentName": await get_user_name(user_id),
+        "phoneNumber": await get_user_phone_number(user_id),
+        "expressionNumber": expression_number,
+        "modelNumber": test_number,
+        "date": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "questionsNumber": str(total_questions),
+        "studentsResults": f"{score/total_questions*100:.0f}%" if total_questions else "0%",
+    }
+
     pdf_filepath = None
     video_filepath = None
 
@@ -630,7 +646,7 @@ async def handle_output_format_choice(update: Update, context: CallbackContext):
         )
 
         pdf_filepath = await generate_quiz_pdf(
-            questions, user_id, "level_determination", str(start_time), test_number
+            questions, user_id, "level_determination", str(start_time), test_number, user_data
         )
 
         if pdf_filepath is None:  # Check if PDF generation failed

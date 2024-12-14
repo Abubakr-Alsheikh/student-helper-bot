@@ -95,31 +95,3 @@ def find_expression(number):
                 pass  # Handle potential errors
 
     return "No solution found"  # If no solution is found
-
-
-def get_student_name(telegram_id):
-    """retrieves the student name."""
-    result = database.get_data(
-        "SELECT name FROM users WHERE telegram_id = ?", (telegram_id,)
-    )
-
-    if result:
-        user_name = result[0]
-    else:
-        user_name = "Unknown User"
-
-    return user_name
-
-
-def get_student_phone_number(telegram_id):
-    """retrieves the student phone number."""
-    result = database.get_data(
-        "SELECT name FROM users WHERE telegram_id = ?", (telegram_id,)
-    )
-
-    if result:
-        user_phone = result[0]
-    else:
-        user_phone = "Unknown Phone"
-
-    return user_phone

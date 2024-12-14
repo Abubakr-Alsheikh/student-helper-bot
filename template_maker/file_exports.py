@@ -2,6 +2,7 @@ import asyncio
 import logging
 import platform
 import shutil
+from docx import Document
 from pdf2image import convert_from_path
 import subprocess
 import os
@@ -10,6 +11,8 @@ import cv2
 from docxtpl import DocxTemplate
 from pptx import Presentation
 import time
+from docxcompose.composer import Composer
+from docx.enum.section import WD_SECTION
 
 if platform.system() == "Windows":
     import win32com.client
@@ -26,6 +29,21 @@ async def generate_word_doc(template_path, output_path, quiz_data):
         logger.error(f"Error generating Word document: {e}")
         raise
 
+async def merge_word_documents(main_doc_path, q_and_a_doc_path, output_path):
+    """Merges the Main and Q\&A Word documents into a single document."""
+    try:
+        main_doc = Document(main_doc_path)
+        # Add a page break to the end of the main document
+        main_doc.add_section(WD_SECTION.NEW_PAGE)
+
+        composer = Composer(main_doc)
+        q_and_a_doc = Document(q_and_a_doc_path)
+        composer.append(q_and_a_doc)
+
+        composer.save(output_path)
+    except Exception as e:
+        logger.error(f"Error merging Word documents: {e}")
+        raise
 
 async def convert_docx_to_pdf(word_file, pdf_file=None):
     # Set default output name if pdf_file is not specified
