@@ -989,21 +989,10 @@ async def handle_view_test_details(update: Update, context: CallbackContext):
         return
 
     # Get detailed test information
-    test_data = database.get_data(
-        """
-        SELECT pt.timestamp, pt.num_questions, pt.score, pt.time_taken, pt.pdf_path,
-               COUNT(CASE WHEN ua.is_correct = 1 THEN 1 END) as correct_answers,
-               COUNT(ua.id) as total_answered
-        FROM previous_tests pt
-        LEFT JOIN user_answers ua ON pt.id = ua.previous_tests_id
-        WHERE pt.id = ?
-        GROUP BY pt.id
-        """,
-        (test_id,),
-    )
+    test_data = await get_test_data(test_id)
 
     if not test_data:
-        await query.answer("عذراً، لم يتم العثور على بيانات الاختبار. 😞")
+        await query.edit_message_text("عذراً، لم يتم العثور على بيانات الاختبار. 😞")
         return
 
     (
@@ -1012,28 +1001,21 @@ async def handle_view_test_details(update: Update, context: CallbackContext):
         score,
         time_taken,
         pdf_path,
+        user_id,
         correct_answers,
         total_answered,
     ) = test_data[0]
 
-    # Format timestamp
-    test_date = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f").strftime(
-        "%Y/%m/%d %H:%M"
-    )
-
-    # Calculate percentage
-    percentage = (score / num_questions) * 100 if num_questions > 0 else 0
-
     # Format message with detailed statistics
-    message = (
-        f"📊 تفاصيل الاختبار\n\n"
-        f"📅 التاريخ: {test_date}\n"
-        f"📝 عدد الأسئلة: {num_questions}\n"
-        f"✅ الإجابات الصحيحة: {correct_answers}\n"
-        f"📊 النتيجة النهائية: {score}/{num_questions} ({percentage:.1f}%)\n"
-        f"⏱ الوقت المستغرق: {int(time_taken // 60)} دقيقة و{int(time_taken % 60)} ثانية\n"
-        f"📋 الأسئلة المجاب عليها: {total_answered}/{num_questions}"
+    message = format_test_details_message(
+        timestamp, num_questions, score, time_taken, correct_answers, total_answered
     )
+
+    # Get and store user data in context
+    context.user_data["user_data"] = await get_user_data_for_test(
+        user_id, test_id, timestamp, num_questions, score
+    )
+    context.user_data["test_id"] = test_id
 
     keyboard = [
         [
@@ -1056,143 +1038,94 @@ async def handle_view_test_details(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(message, reply_markup=reply_markup)
 
-
 async def download_test_pdf(update: Update, context: CallbackContext):
     """Downloads the PDF file for the test."""
-    query = update.callback_query
-    await query.answer()
-    try:
-        _, test_id = query.data.split(":")
-        test_id = int(test_id)
-    except (ValueError, IndexError) as e:
-        logger.error(f"Error extracting test_id from {query.data}: {e}")
-        await query.message.reply_text(
-            "حدث خطأ أثناء تحميل ملف PDF، يرجى المحاولة مرة أخرى."
-        )
-        return
-
-    # Send initial "generating" message
-    generating_message = await query.message.reply_text("جارٍ إنشاء ملف PDF... ⏳")
-
-    # Fetch test details to regenerate PDF if needed
-    test_details = database.get_data(
-        """
-        SELECT user_id, pdf_path, timestamp 
-        FROM previous_tests 
-        WHERE id = ?
-        """,
-        (test_id,),
-    )
-
-    if not test_details:
-        await generating_message.edit_text(
-            "عذراً، لم يتم العثور على بيانات الاختبار. 😞"
-        )
-        return
-
-    user_id, pdf_path, timestamp = test_details[0]
-
-    # Check if PDF needs to be regenerated
-    if not pdf_path or not os.path.exists(pdf_path):
-        # Await the initial generating message
-        await generating_message.edit_text("جارٍ إنشاء ملف PDF... 🔄")
-
-        test_number = database.get_data(
-            """
-            SELECT COUNT(*) 
-            FROM previous_tests 
-            WHERE user_id = ? AND id <= ?
-            """,
-            (user_id, test_id),
-        )[0][0]
-
-        # Retrieve the questions for this test
-        questions = database.get_data(
-            """
-            SELECT q.* 
-            FROM questions q
-            JOIN user_answers ua ON q.id = ua.question_id
-            WHERE ua.previous_tests_id = ?
-            """,
-            (test_id,),
-        )
-
-        end_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
-
-        user_data = {
-            "studentName": await get_user_name(user_id),
-            "phoneNumber": await get_user_phone_number(user_id),
-            "expressionNumber": find_expression(generate_number()),  # You might want to store/retrieve this instead of generating a new one
-            "modelNumber": test_number,
-            "date": end_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "questionsNumber": str(len(questions)),
-            "studentsResults": "N/A",  # You might not have the score here, or calculate it
-        }
-
-        # Regenerate PDF
-        pdf_path = await generate_quiz_pdf(
-            questions, user_id, "tests", timestamp, test_number, user_data
-        )
-
-        if pdf_path:
-            # Update the database with the new PDF path
-            database.execute_query(
-                "UPDATE previous_tests SET pdf_path = ? WHERE id = ?",
-                (pdf_path, test_id),
-            )
-        else:
-            await generating_message.edit_text("حدث خطأ أثناء إنشاء ملف PDF. 😞")
-            return
-
-    # Update generating message before sending file
-    await generating_message.edit_text("جارٍ تحميل ملف PDF... 📄")
-
-    if pdf_path:
-        try:
-            with open(pdf_path, "rb") as f:
-                await context.bot.send_document(
-                    chat_id=query.message.chat_id, document=f
-                )
-
-            # Delete the generating message
-            await generating_message.delete()
-        except FileNotFoundError:
-            logger.error(f"PDF file not found at path: {pdf_path}")
-            await generating_message.edit_text(
-                "عذراً، لم يتم العثور على ملف PDF. قد يكون قد تم حذفه."
-            )
-        except Exception as e:
-            logger.error(f"Error sending PDF for test_id: {test_id}, {e}")
-            await generating_message.edit_text(
-                "حدث خطأ أثناء إرسال ملف PDF، يرجى المحاولة مرة أخرى."
-            )
-    else:
-        await generating_message.edit_text(
-            "لم يتم العثور على ملف PDF لهذا الاختبار. 😞"
-        )
-
+    await handle_download_test_file(update, context, "pdf")
 
 async def download_test_video(update: Update, context: CallbackContext):
     """Downloads the video file for the test."""
+    await handle_download_test_file(update, context, "video")
+
+# Helper Functions
+
+async def get_test_data(test_id):
+    """Retrieves test data from the database."""
+    return database.get_data(
+        """
+        SELECT pt.timestamp, pt.num_questions, pt.score, pt.time_taken, pt.pdf_path, pt.user_id,
+               COUNT(CASE WHEN ua.is_correct = 1 THEN 1 END) as correct_answers,
+               COUNT(ua.id) as total_answered
+        FROM previous_tests pt
+        LEFT JOIN user_answers ua ON pt.id = ua.previous_tests_id
+        WHERE pt.id = ?
+        GROUP BY pt.id
+        """,
+        (test_id,),
+    )
+
+def format_test_details_message(
+    timestamp, num_questions, score, time_taken, correct_answers, total_answered
+):
+    """Formats the test details message."""
+    test_date = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f").strftime(
+        "%Y/%m/%d %H:%M"
+    )
+    percentage = (score / num_questions) * 100 if num_questions > 0 else 0
+    return (
+        f"📊 تفاصيل الاختبار\n\n"
+        f"📅 التاريخ: {test_date}\n"
+        f"📝 عدد الأسئلة: {num_questions}\n"
+        f"✅ الإجابات الصحيحة: {correct_answers}\n"
+        f"📊 النتيجة النهائية: {score}/{num_questions} ({percentage:.1f}%)\n"
+        f"⏱ الوقت المستغرق: {int(time_taken // 60)} دقيقة و{int(time_taken % 60)} ثانية\n"
+        f"📋 الأسئلة المجاب عليها: {total_answered}/{num_questions}"
+    )
+
+async def get_user_data_for_test(user_id, test_id, timestamp, num_questions, score):
+    """Gets user data for the test."""
+    end_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
+    test_number = database.get_data(
+        """
+        SELECT COUNT(*) 
+        FROM previous_tests 
+        WHERE user_id = ? AND id <= ?
+        """,
+        (user_id, test_id),
+    )[0][0]
+
+    percentage = (score / num_questions) * 100 if num_questions > 0 else 0
+
+    phone_number = str(await get_user_phone_number(user_id))
+    return {
+        "studentName": await get_user_name(user_id),
+        "phoneNumber": phone_number,
+        "expressionNumber": find_expression(phone_number),
+        "modelNumber": test_number,
+        "date": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "questionsNumber": str(num_questions),
+        "studentsResults": f"{percentage:.0f}%",
+    }
+
+async def handle_download_test_file(update: Update, context: CallbackContext, file_type: str):
+    """Handles downloading either PDF or video for the test."""
     query = update.callback_query
     await query.answer()
-    try:
-        _, test_id = query.data.split(":")
-        test_id = int(test_id)
-    except (ValueError, IndexError) as e:
-        logger.error(f"Error extracting test_id from {query.data}: {e}")
+
+    user_data = context.user_data.get("user_data")
+    test_id = context.user_data.get("test_id")
+
+    if not user_data or test_id is None:
+        logger.error(f"User data or test ID not found in context for {file_type}.")
         await query.message.reply_text(
-            "حدث خطأ أثناء تحميل الفيديو، يرجى المحاولة مرة أخرى."
+            f"حدث خطأ أثناء تحميل ملف {file_type.upper()}، يرجى المحاولة مرة أخرى."
         )
         return
 
-    # Send initial "generating" message
-    generating_message = await query.message.reply_text("جارٍ إنشاء الفيديو... ⏳")
+    generating_message = await query.message.reply_text(f"جارٍ إنشاء ملف {file_type.upper()}... ⏳")
 
-    # Fetch test details to regenerate video if needed
     test_details = database.get_data(
-        """
-        SELECT user_id, video_path, timestamp 
+        f"""
+        SELECT user_id, {file_type}_path, timestamp 
         FROM previous_tests 
         WHERE id = ?
         """,
@@ -1205,22 +1138,12 @@ async def download_test_video(update: Update, context: CallbackContext):
         )
         return
 
-    user_id, video_path, timestamp = test_details[0]
+    user_id, file_path, timestamp = test_details[0]
+    
+    # Check if file needs to be regenerated
+    if not file_path or not os.path.exists(file_path):
+        await generating_message.edit_text(f"جارٍ إنشاء ملف {file_type.upper()}... 🔄")
 
-    # Check if video needs to be regenerated
-    if not video_path or not os.path.exists(video_path):
-        # Update generating message for video generation
-        await generating_message.edit_text("جارٍ إنشاء الفيديو... 🔄")
-
-        test_number = database.get_data(
-            """
-            SELECT COUNT(*) 
-            FROM previous_tests 
-            WHERE user_id = ? AND id <= ?
-            """,
-            (user_id, test_id),
-        )[0][0]
-        # Retrieve the questions for this test
         questions = database.get_data(
             """
             SELECT q.* 
@@ -1231,56 +1154,52 @@ async def download_test_video(update: Update, context: CallbackContext):
             (test_id,),
         )
 
-        end_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
+        if file_type == "pdf":
+            file_path = await generate_quiz_pdf(
+                questions,
+                user_id,
+                "tests",
+                timestamp,
+                user_data["modelNumber"],
+                user_data,
+            )
+        elif file_type == "video":
+            file_path = await generate_quiz_video(
+                questions,
+                user_id,
+                "tests",
+                timestamp,
+                user_data["modelNumber"],
+                user_data=user_data,
+            )
 
-        user_data = {
-            "studentName": await get_user_name(user_id),
-            "phoneNumber": await get_user_phone_number(user_id),
-            "expressionNumber": find_expression(generate_number()),  # You might want to store/retrieve this instead of generating a new one
-            "modelNumber": test_number,
-            "date": end_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "questionsNumber": str(len(questions)),
-            "studentsResults": "N/A",  # You might not have the score here, or calculate it
-        }
-
-        # Regenerate Video (passing user_data)
-        video_path = await generate_quiz_video(
-            questions, user_id, "tests", timestamp, test_number, user_data=user_data
-        )
-
-        if video_path:
-            # Update the database with the new video path
+        if file_path:
             database.execute_query(
-                "UPDATE previous_tests SET video_path = ? WHERE id = ?",
-                (video_path, test_id),
+                f"UPDATE previous_tests SET {file_type}_path = ? WHERE id = ?",
+                (file_path, test_id),
             )
         else:
-            await generating_message.edit_text("حدث خطأ أثناء إنشاء الفيديو. 😞")
+            await generating_message.edit_text(f"حدث خطأ أثناء إنشاء ملف {file_type.upper()}. 😞")
             return
 
-    # Update generating message before sending file
-    await generating_message.edit_text("جارٍ تحميل الفيديو... 🎥")
-
-    if video_path:
-        try:
-            with open(video_path, "rb") as f:
+    # Send the file
+    await generating_message.edit_text(f"جارٍ تحميل ملف {file_type.upper()}... 📄")
+    try:
+        with open(file_path, "rb") as f:
+            if file_type == "pdf":
+                await context.bot.send_document(chat_id=query.message.chat_id, document=f)
+            elif file_type == "video":
                 await context.bot.send_video(chat_id=query.message.chat_id, video=f)
-
-            # Delete the generating message
-            await generating_message.delete()
-        except FileNotFoundError:
-            logger.error(f"Video file not found at path: {video_path}")
-            await generating_message.edit_text(
-                "عذراً، لم يتم العثور على ملف الفيديو. قد يكون قد تم حذفه."
-            )
-        except Exception as e:
-            logger.error(f"Error sending video for test_id: {test_id}, {e}")
-            await generating_message.edit_text(
-                "حدث خطأ أثناء إرسال ملف الفيديو، يرجى المحاولة مرة أخرى."
-            )
-    else:
+        await generating_message.delete()
+    except FileNotFoundError:
+        logger.error(f"{file_type.upper()} file not found at path: {file_path}")
         await generating_message.edit_text(
-            "لم يتم العثور على ملف الفيديو لهذا الاختبار. 😞"
+            f"عذراً، لم يتم العثور على ملف {file_type.upper()}. قد يكون قد تم حذفه."
+        )
+    except Exception as e:
+        logger.error(f"Error sending {file_type.upper()} for test_id: {test_id}, {e}")
+        await generating_message.edit_text(
+            f"حدث خطأ أثناء إرسال ملف {file_type.upper()}، يرجى المحاولة مرة أخرى."
         )
 
 

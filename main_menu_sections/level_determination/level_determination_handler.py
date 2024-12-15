@@ -665,7 +665,7 @@ async def handle_output_format_choice(update: Update, context: CallbackContext):
     elif output_format == "video":  # Future implementation
         await update.effective_message.reply_text("جاري إنشاء الفيديو... 🎬")
         video_filepath = await generate_quiz_video(
-            questions, user_id, "level_determination", str(start_time), test_number
+            questions, user_id, "level_determination", str(start_time), test_number, user_data
         )
 
         if (
@@ -866,10 +866,11 @@ async def track_progress(update: Update, context: CallbackContext):
         reply_markup=reply_markup
     )
 
-
 async def show_level_details(update: Update, context: CallbackContext):
     """Shows detailed statistics for a specific level determination test."""
     query = update.callback_query
+    await query.answer()
+
     try:
         level_determination_id = int(query.data.split("_")[-1])
     except ValueError as e:
@@ -877,28 +878,11 @@ async def show_level_details(update: Update, context: CallbackContext):
         await query.message.reply_text("حدث خطأ أثناء عرض تفاصيل الاختبار. ⚠️")
         return
 
-    try:
-        # Get detailed test information including answer statistics
-        test_data = get_data(
-            """
-            SELECT ld.timestamp, ld.num_questions, ld.percentage, ld.time_taken, 
-                   ld.pdf_path, ld.video_path,
-                   COUNT(CASE WHEN lda.is_correct = 1 THEN 1 END) as correct_answers,
-                   COUNT(lda.id) as total_answered
-            FROM level_determinations ld
-            LEFT JOIN level_determination_answers lda ON ld.id = lda.level_determination_id
-            WHERE ld.id = ?
-            GROUP BY ld.id
-            """,
-            (level_determination_id,)
-        )
-    except Exception as e:
-        logger.error(f"Error fetching level determination details: {e}")
-        await query.message.reply_text("حدث خطأ أثناء جلب بيانات الاختبار. ⚠️")
-        return
+    # Get detailed test information
+    level_data = await get_level_data(level_determination_id)
 
-    if not test_data:
-        await query.message.reply_text("لم يتم العثور على هذا الاختبار. ⚠️")
+    if not level_data:
+        await query.edit_message_text("لم يتم العثور على هذا الاختبار. ⚠️")
         return
 
     (
@@ -909,14 +893,79 @@ async def show_level_details(update: Update, context: CallbackContext):
         pdf_path,
         video_path,
         correct_answers,
-        total_answered
-    ) = test_data[0]
+        total_answered,
+        user_id
+    ) = level_data[0]
 
+    # Format message with detailed statistics
+    message = format_level_details_message(
+        timestamp, num_questions, percentage, time_taken, correct_answers, total_answered
+    )
+
+    # Get and store user data in context
+    context.user_data["user_data"] = await get_user_data_for_level(
+        user_id, level_determination_id, timestamp, num_questions, percentage
+    )
+    context.user_data["level_determination_id"] = level_determination_id
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "تحميل ملف PDF ⬇️",
+                callback_data=f"download_level_pdf:{level_determination_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "تحميل الفيديو 🎥",
+                callback_data=f"download_level_video:{level_determination_id}",
+            )
+        ],
+        [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data="track_progress")],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(message, reply_markup=reply_markup)
+
+async def download_level_pdf(update: Update, context: CallbackContext):
+    """Downloads the PDF file for the level determination test."""
+    await handle_download_level_file(update, context, "pdf")
+
+async def download_level_video(update: Update, context: CallbackContext):
+    """Downloads the video file for the level determination test."""
+    await handle_download_level_file(update, context, "video")
+
+# Helper Functions for Level Determination
+
+async def get_level_data(level_determination_id):
+    """Retrieves level determination data from the database."""
+    try:
+        return database.get_data(
+            """
+            SELECT ld.timestamp, ld.num_questions, ld.percentage, ld.time_taken, 
+                   ld.pdf_path, ld.video_path,
+                   COUNT(CASE WHEN lda.is_correct = 1 THEN 1 END) as correct_answers,
+                   COUNT(lda.id) as total_answered,
+                   ld.user_id
+            FROM level_determinations ld
+            LEFT JOIN level_determination_answers lda ON ld.id = lda.level_determination_id
+            WHERE ld.id = ?
+            GROUP BY ld.id
+            """,
+            (level_determination_id,),
+        )
+    except Exception as e:
+        logger.error(f"Error fetching level determination details: {e}")
+        return None
+
+def format_level_details_message(
+    timestamp, num_questions, percentage, time_taken, correct_answers, total_answered
+):
+    """Formats the level determination details message."""
     test_date = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f").strftime(
         "%Y/%m/%d %H:%M"
     )
-
-    message = (
+    return (
         f"📊 تفاصيل اختبار تحديد المستوى\n\n"
         f"📅 التاريخ: {test_date}\n"
         f"📝 عدد الأسئلة: {num_questions}\n"
@@ -926,321 +975,125 @@ async def show_level_details(update: Update, context: CallbackContext):
         f"📋 الأسئلة المجاب عليها: {total_answered}/{num_questions}"
     )
 
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                "تحميل ملف PDF ⬇️",
-                callback_data=f"download_level_pdf:{level_determination_id}"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "تحميل الفيديو 🎥",
-                callback_data=f"download_tests_video:{level_determination_id}"
-            )
-        ],
-        [InlineKeyboardButton("الرجوع للخلف 🔙", callback_data="track_progress")]
-    ]
+async def get_user_data_for_level(user_id, level_determination_id, timestamp, num_questions, percentage):
+    """Gets user data for the level determination."""
+    end_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
+    test_number = database.get_data(
+        """
+        SELECT COUNT(*) 
+        FROM level_determinations 
+        WHERE user_id = ? AND id <= ?
+        """,
+        (user_id, level_determination_id),
+    )[0][0]
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(message, reply_markup=reply_markup)
+    phone_number = str(await get_user_phone_number(user_id))
+    return {
+        "studentName": await get_user_name(user_id),
+        "phoneNumber": phone_number,
+        "expressionNumber": find_expression(phone_number),
+        "modelNumber": test_number,
+        "date": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "questionsNumber": str(num_questions),
+        "studentsResults": f"{percentage:.1f}%",
+    }
 
-
-async def download_pdf(update: Update, context: CallbackContext):
-    """Downloads the PDF file for the level determination test."""
+async def handle_download_level_file(update: Update, context: CallbackContext, file_type: str):
+    """Handles downloading either PDF or video for the level determination."""
     query = update.callback_query
     await query.answer()
+
+    user_data = context.user_data.get("user_data")
+    level_determination_id = context.user_data.get("level_determination_id")
+
+    if not user_data or level_determination_id is None:
+        logger.error(f"User data or level determination ID not found in context for {file_type}.")
+        await query.message.reply_text(
+            f"حدث خطأ أثناء تحميل ملف {file_type.upper()}، يرجى المحاولة مرة أخرى."
+        )
+        return
+
+    generating_message = await query.message.reply_text(f"جارٍ إنشاء ملف {file_type.upper()}... ⏳")
+
+    test_details = database.get_data(
+        f"""
+        SELECT user_id, {file_type}_path, timestamp 
+        FROM level_determinations 
+        WHERE id = ?
+        """,
+        (level_determination_id,),
+    )
+
+    if not test_details:
+        await generating_message.edit_text(
+            "عذراً، لم يتم العثور على بيانات الاختبار. 😞"
+        )
+        return
+
+    user_id, file_path, timestamp = test_details[0]
+
+    # Check if file needs to be regenerated
+    if not file_path or not os.path.exists(file_path):
+        await generating_message.edit_text(f"جارٍ إنشاء ملف {file_type.upper()}... 🔄")
+
+        questions = database.get_data(
+            """
+            SELECT q.* 
+            FROM questions q
+            JOIN level_determination_answers ua ON q.id = ua.question_id
+            WHERE ua.level_determination_id = ?
+            """,
+            (level_determination_id,),
+        )
+
+        if file_type == "pdf":
+            file_path = await generate_quiz_pdf(
+                questions,
+                user_id,
+                "level_determination",
+                timestamp,
+                user_data["modelNumber"],
+                user_data
+            )
+        elif file_type == "video":
+            file_path = await generate_quiz_video(
+                questions,
+                user_id,
+                "level_determination",
+                timestamp,
+                user_data["modelNumber"],
+                user_data=user_data
+            )
+
+        if file_path:
+            database.execute_query(
+                f"UPDATE level_determinations SET {file_type}_path = ? WHERE id = ?",
+                (file_path, level_determination_id),
+            )
+        else:
+            await generating_message.edit_text(f"حدث خطأ أثناء إنشاء ملف {file_type.upper()}. 😞")
+            return
+
+    # Send the file
+    await generating_message.edit_text(f"جارٍ تحميل ملف {file_type.upper()}... 📄")
     try:
-        _, level_determination_id = query.data.split(":")
-        level_determination_id = int(level_determination_id)
+        with open(file_path, "rb") as f:
+            if file_type == "pdf":
+                await context.bot.send_document(chat_id=query.message.chat_id, document=f)
+            elif file_type == "video":
+                await context.bot.send_video(chat_id=query.message.chat_id, video=f)
+        await generating_message.delete()
+    except FileNotFoundError:
+        logger.error(f"{file_type.upper()} file not found at path: {file_path}")
+        await generating_message.edit_text(
+            f"عذراً، لم يتم العثور على ملف {file_type.upper()}. قد يكون قد تم حذفه."
+        )
     except Exception as e:
-        logger.error(f"Error extracting level_determination_id: {e}")
-        await query.message.reply_text("حدث خطأ أثناء تحميل ملف PDF. ⚠️")
-        return
-
-    # Send initial "generating" message
-    generating_message = await query.message.reply_text("جارٍ إنشاء ملف PDF... ⏳")
-
-    # Fetch test details to regenerate PDF if needed
-    test_details = database.get_data(
-        """
-        SELECT user_id, pdf_path, timestamp 
-        FROM level_determinations 
-        WHERE id = ?
-        """,
-        (level_determination_id,),
-    )
-
-    if not test_details:
+        logger.error(f"Error sending {file_type.upper()} for level_determination_id: {level_determination_id}, {e}")
         await generating_message.edit_text(
-            "عذراً، لم يتم العثور على بيانات الاختبار. 😞"
-        )
-        return
-
-    user_id, pdf_path, timestamp = test_details[0]
-
-    # Check if PDF needs to be regenerated
-    if not pdf_path or not os.path.exists(pdf_path):
-        # Await the initial generating message
-        await generating_message.edit_text("جارٍ إنشاء ملف PDF... 🔄")
-
-        test_number = database.get_data(
-            """
-            SELECT COUNT(*) 
-            FROM level_determinations 
-            WHERE user_id = ? AND id <= ?
-            """,
-            (user_id, level_determination_id),
-        )[0][0]
-
-        # Retrieve the questions for this test
-        questions = database.get_data(
-            """
-            SELECT q.* 
-            FROM questions q
-            JOIN level_determination_answers ua ON q.id = ua.question_id
-            WHERE ua.level_determination_id = ?
-            """,
-            (level_determination_id,),
+            f"حدث خطأ أثناء إرسال ملف {file_type.upper()}، يرجى المحاولة مرة أخرى."
         )
 
-        # Regenerate PDF
-        pdf_path = await generate_quiz_pdf(
-            questions, user_id, "level_determination", timestamp, test_number
-        )
-
-        if pdf_path:
-            # Update the database with the new PDF path
-            database.execute_query(
-                "UPDATE level_determinations SET pdf_path = ? WHERE id = ?",
-                (pdf_path, level_determination_id),
-            )
-        else:
-            await generating_message.edit_text("حدث خطأ أثناء إنشاء ملف PDF. 😞")
-            return
-
-    # Update generating message before sending file
-    await generating_message.edit_text("جارٍ تحميل ملف PDF... 📄")
-
-    if pdf_path:
-        try:
-            with open(pdf_path, "rb") as f:
-                await context.bot.send_document(
-                    chat_id=query.message.chat_id, document=f
-                )
-
-            # Delete the generating message
-            await generating_message.delete()
-        except FileNotFoundError:
-            logger.error(f"PDF file not found at path: {pdf_path}")
-            await generating_message.edit_text(
-                "عذراً، لم يتم العثور على ملف PDF. قد يكون قد تم حذفه."
-            )
-        except Exception as e:
-            logger.error(f"Error sending PDF for level_determination_id: {level_determination_id}, {e}")
-            await generating_message.edit_text(
-                "حدث خطأ أثناء إرسال ملف PDF، يرجى المحاولة مرة أخرى."
-            )
-    else:
-        await generating_message.edit_text(
-            "لم يتم العثور على ملف PDF لهذا الاختبار. 😞"
-        )
-
-
-async def download_test_video(update: Update, context: CallbackContext):
-    """Downloads the video file for the test."""
-    query = update.callback_query
-    await query.answer()
-    try:
-        _, test_id = query.data.split(":")
-        test_id = int(test_id)
-    except (ValueError, IndexError) as e:
-        logger.error(f"Error extracting test_id from {query.data}: {e}")
-        await query.message.reply_text(
-            "حدث خطأ أثناء تحميل الفيديو، يرجى المحاولة مرة أخرى."
-        )
-        return
-
-    # Send initial "generating" message
-    generating_message = await query.message.reply_text("جارٍ إنشاء الفيديو... ⏳")
-
-    # Fetch test details to regenerate video if needed
-    test_details = database.get_data(
-        """
-        SELECT user_id, video_path, timestamp 
-        FROM previous_tests 
-        WHERE id = ?
-        """,
-        (test_id,),
-    )
-
-    if not test_details:
-        await generating_message.edit_text(
-            "عذراً، لم يتم العثور على بيانات الاختبار. 😞"
-        )
-        return
-
-    user_id, video_path, timestamp = test_details[0]
-
-    # Check if video needs to be regenerated
-    if not video_path or not os.path.exists(video_path):
-        # Update generating message for video generation
-        await generating_message.edit_text("جارٍ إنشاء الفيديو... 🔄")
-
-        test_number = database.get_data(
-            """
-            SELECT COUNT(*) 
-            FROM previous_tests 
-            WHERE user_id = ? AND id <= ?
-            """,
-            (user_id, test_id),
-        )[0][0]
-        # Retrieve the questions for this test
-        questions = database.get_data(
-            """
-            SELECT q.* 
-            FROM questions q
-            JOIN user_answers ua ON q.id = ua.question_id
-            WHERE ua.previous_tests_id = ?
-            """,
-            (test_id,),
-        )
-
-        # Regenerate Video
-        video_path = await generate_quiz_video(questions, user_id, "tests", timestamp, test_number)
-
-        if video_path:
-            # Update the database with the new video path
-            database.execute_query(
-                "UPDATE previous_tests SET video_path = ? WHERE id = ?",
-                (video_path, test_id),
-            )
-        else:
-            await generating_message.edit_text("حدث خطأ أثناء إنشاء الفيديو. 😞")
-            return
-
-    # Update generating message before sending file
-    await generating_message.edit_text("جارٍ تحميل الفيديو... 🎥")
-
-    if video_path:
-        try:
-            with open(video_path, "rb") as f:
-                await context.bot.send_video(chat_id=query.message.chat_id, video=f)
-
-            # Delete the generating message
-            await generating_message.delete()
-        except FileNotFoundError:
-            logger.error(f"Video file not found at path: {video_path}")
-            await generating_message.edit_text(
-                "عذراً، لم يتم العثور على ملف الفيديو. قد يكون قد تم حذفه."
-            )
-        except Exception as e:
-            logger.error(f"Error sending video for test_id: {test_id}, {e}")
-            await generating_message.edit_text(
-                "حدث خطأ أثناء إرسال ملف الفيديو، يرجى المحاولة مرة أخرى."
-            )
-    else:
-        await generating_message.edit_text(
-            "لم يتم العثور على ملف الفيديو لهذا الاختبار. 😞"
-        )
-
-
-async def download_video(update: Update, context: CallbackContext):
-    """Downloads the video file for the test."""
-    query = update.callback_query
-    await query.answer()
-    try:
-        _, level_determination_id = query.data.split(":")
-        level_determination_id = int(level_determination_id)
-    except (ValueError, IndexError) as e:
-        logger.error(f"Error extracting level_determination_id from {query.data}: {e}")
-        await query.message.reply_text(
-            "حدث خطأ أثناء تحميل الفيديو، يرجى المحاولة مرة أخرى."
-        )
-        return
-
-    # Send initial "generating" message
-    generating_message = await query.message.reply_text("جارٍ إنشاء الفيديو... ⏳")
-
-    # Fetch test details to regenerate video if needed
-    test_details = database.get_data(
-        """
-        SELECT user_id, video_path, timestamp 
-        FROM level_determinations 
-        WHERE id = ?
-        """,
-        (level_determination_id,),
-    )
-
-    if not test_details:
-        await generating_message.edit_text(
-            "عذراً، لم يتم العثور على بيانات الاختبار. 😞"
-        )
-        return
-
-    user_id, video_path, timestamp = test_details[0]
-
-    # Check if video needs to be regenerated
-    if not video_path or not os.path.exists(video_path):
-        # Update generating message for video generation
-        await generating_message.edit_text("جارٍ إنشاء الفيديو... 🔄")
-
-        test_number = database.get_data(
-            """
-            SELECT COUNT(*) 
-            FROM level_determinations 
-            WHERE user_id = ? AND id <= ?
-            """,
-            (user_id, level_determination_id),
-        )[0][0]
-        # Retrieve the questions for this test
-        questions = database.get_data(
-            """
-            SELECT q.* 
-            FROM questions q
-            JOIN level_determination_answers ua ON q.id = ua.question_id
-            WHERE ua.level_determination_id = ?
-            """,
-            (level_determination_id,),
-        )
-
-        # Regenerate Video
-        video_path = await generate_quiz_video(questions, user_id, "tests", timestamp, test_number)
-
-        if video_path:
-            # Update the database with the new video path
-            database.execute_query(
-                "UPDATE level_determinations SET video_path = ? WHERE id = ?",
-                (video_path, level_determination_id),
-            )
-        else:
-            await generating_message.edit_text("حدث خطأ أثناء إنشاء الفيديو. 😞")
-            return
-
-    # Update generating message before sending file
-    await generating_message.edit_text("جارٍ تحميل الفيديو... 🎥")
-
-    if video_path:
-        try:
-            with open(video_path, "rb") as f:
-                await context.bot.send_video(chat_id=query.message.chat_id, video=f)
-
-            # Delete the generating message
-            await generating_message.delete()
-        except FileNotFoundError:
-            logger.error(f"Video file not found at path: {video_path}")
-            await generating_message.edit_text(
-                "عذراً، لم يتم العثور على ملف الفيديو. قد يكون قد تم حذفه."
-            )
-        except Exception as e:
-            logger.error(f"Error sending video for level_determination_id: {level_determination_id}, {e}")
-            await generating_message.edit_text(
-                "حدث خطأ أثناء إرسال ملف الفيديو، يرجى المحاولة مرة أخرى."
-            )
-    else:
-        await generating_message.edit_text(
-            "لم يتم العثور على ملف الفيديو لهذا الاختبار. 😞"
-        )
 
 LEVEL_DETERMINATION_HANDLERS = {
     "level_determination": handle_level_determination,
@@ -1251,8 +1104,8 @@ LEVEL_DETERMINATION_HANDLERS = {
 LEVEL_DETERMINATION_HANDLERS_PATTERN = {
     r"^output_format_level:.+$": handle_output_format_choice,
     r"^show_level_details_.+$": show_level_details,
-    r"^download_level_pdf:.+$": download_pdf,
-    r"^download_level_video:.+$": download_video,
+    r"^download_level_pdf:.+$": download_level_pdf,
+    r"^download_level_video:.+$": download_level_video,
 }
 
 
