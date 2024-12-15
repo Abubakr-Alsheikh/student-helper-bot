@@ -3,11 +3,10 @@ import os
 from datetime import datetime
 import platform
 
-from config import Q_AND_A_FILE_PATH, Q_AND_A_FILE_PATH_POWERPOINT, WORD_MAIN_PATH
+from config import POWERPOINT_MAIN_PATH, Q_AND_A_FILE_PATH, Q_AND_A_FILE_PATH_POWERPOINT, WORD_MAIN_PATH
 from template_maker.file_exports import (
     convert_docx_to_pdf,
     convert_pptx_to_mp4,
-    convert_pptx_to_mp4_with_windows,
     generate_powerpoint,
     generate_word_doc,
     merge_word_documents,
@@ -131,7 +130,7 @@ async def generate_quiz_pdf(
 
 
 async def generate_quiz_video(
-    questions, user_id, which_quiz, quiz_timestamp, quiz_number, category_name=None
+    questions, user_id, which_quiz, quiz_timestamp, quiz_number, user_data, category_name=None
 ) -> str:  # Or None if it fails
     """Placeholder function for video generation."""
 
@@ -209,7 +208,7 @@ async def generate_quiz_video(
 
         try:
             await generate_powerpoint(
-                Q_AND_A_FILE_PATH_POWERPOINT, powerpoint_filename, quiz_data
+                POWERPOINT_MAIN_PATH, Q_AND_A_FILE_PATH_POWERPOINT, powerpoint_filename, quiz_data, user_data
             )
         except Exception as e:
             logger.error(f"Error generating PowerPoint: {e}")

@@ -789,7 +789,7 @@ async def handle_output_format_choice(update: Update, context: CallbackContext):
     elif output_format == "video":  # Future implementation
         await update.effective_message.reply_text("جاري إنشاء الفيديو... 🎬")
         video_filepath = await generate_quiz_video(
-            questions, user_id, "tests", str(start_time), test_number, category_name
+            questions, user_id, "tests", str(start_time), test_number, user_data, category_name
         )
 
         if (
@@ -1117,9 +1117,21 @@ async def download_test_pdf(update: Update, context: CallbackContext):
             (test_id,),
         )
 
+        end_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
+
+        user_data = {
+            "studentName": await get_user_name(user_id),
+            "phoneNumber": await get_user_phone_number(user_id),
+            "expressionNumber": find_expression(generate_number()),  # You might want to store/retrieve this instead of generating a new one
+            "modelNumber": test_number,
+            "date": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "questionsNumber": str(len(questions)),
+            "studentsResults": "N/A",  # You might not have the score here, or calculate it
+        }
+
         # Regenerate PDF
         pdf_path = await generate_quiz_pdf(
-            questions, user_id, "tests", timestamp, test_number
+            questions, user_id, "tests", timestamp, test_number, user_data
         )
 
         if pdf_path:
@@ -1219,9 +1231,21 @@ async def download_test_video(update: Update, context: CallbackContext):
             (test_id,),
         )
 
-        # Regenerate Video
+        end_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
+
+        user_data = {
+            "studentName": await get_user_name(user_id),
+            "phoneNumber": await get_user_phone_number(user_id),
+            "expressionNumber": find_expression(generate_number()),  # You might want to store/retrieve this instead of generating a new one
+            "modelNumber": test_number,
+            "date": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "questionsNumber": str(len(questions)),
+            "studentsResults": "N/A",  # You might not have the score here, or calculate it
+        }
+
+        # Regenerate Video (passing user_data)
         video_path = await generate_quiz_video(
-            questions, user_id, "tests", timestamp, test_number
+            questions, user_id, "tests", timestamp, test_number, user_data=user_data
         )
 
         if video_path:

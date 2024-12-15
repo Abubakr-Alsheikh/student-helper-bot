@@ -14,6 +14,7 @@ from pptx import Presentation
 import time
 from docxcompose.composer import Composer
 from docx.enum.section import WD_SECTION
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 if platform.system() == "Windows":
     import win32com.client
@@ -93,84 +94,154 @@ async def convert_docx_to_pdf(word_file, pdf_file=None):
     else:
         raise FileNotFoundError("PDF conversion failed.")
 
-
-
-async def generate_powerpoint(template_path, output_path, quiz_data):
+async def generate_powerpoint(main_template_path, q_and_a_template_path, output_path, quiz_data, user_data):
     """
-    Generates a PowerPoint presentation based on the provided quiz data,
-    preserving all formatting from the template.
-
-    Args:
-        template_path: Path to the PowerPoint template file.
-        output_path: Path to save the generated PowerPoint file.
-        quiz_data: A dictionary containing quiz data, including a list of questions.
+    Generates a PowerPoint presentation, merges slides from two templates,
+    and handles slide layouts and masters to avoid duplication.
     """
     try:
-        prs = Presentation(template_path)
+        prs = Presentation(main_template_path)
+        q_and_a_prs = Presentation(q_and_a_template_path)
+
+        # --- 1. Replace Placeholders in Main Template ---
+        placeholder_mapping = {
+            "studentName": user_data.get("studentName"),
+            "phoneNumber": user_data.get("phoneNumber"),
+            "expressionNumber": user_data.get("expressionNumber"),
+            "modelNumber": user_data.get("modelNumber"),
+            "date": user_data.get("date"),
+            "questionsNumber": user_data.get("questionsNumber"),
+            "studentsResults": user_data.get("studentsResults"),
+        }
+
+        replace_placeholders_in_slide(prs.slides, placeholder_mapping)
+
+        # --- 2. Prepare Slide Layouts and Masters from Q&A Template ---
+        q_and_a_layouts = {layout.name: layout for layout in q_and_a_prs.slide_layouts}
+        q_and_a_masters = {master.name: master for master in q_and_a_prs.slide_masters}
+
+        # --- 3. Add Q&A Slides ---
         questions = quiz_data["questions"]
-
         for i, question in enumerate(questions):
-            # Duplicate the first four slides for each question
             for j in range(4):
-                source_slide = prs.slides[j]
-                slide_layout = source_slide.slide_layout
-                new_slide = prs.slides.add_slide(slide_layout)
+                source_slide = q_and_a_prs.slides[j]
 
-                # Copy shapes (including their formatting and content)
-                for shape in source_slide.shapes:
-                    el = shape.element
-                    new_el = copy.deepcopy(el)
-                    new_slide.shapes._spTree.insert_element_before(new_el, "p:extLst")
-                    new_slide.background.fill.solid()
-                    source_slide.background.fill.solid()
-                    new_slide.background.fill.fore_color.rgb = source_slide.background.fill.fore_color.rgb
+                # --- 3.1. Handle Slide Layout ---
+                new_layout = get_or_create_slide_layout(prs, source_slide, q_and_a_layouts, q_and_a_masters)
+                new_slide = prs.slides.add_slide(new_layout)
 
-                # Replace placeholders in the new slide (text only)
-                for shape in new_slide.shapes:
-                    if shape.has_text_frame:
-                        for paragraph in shape.text_frame.paragraphs:
-                            if "QuestionNumber" == paragraph.text:
-                                paragraph.runs[0].text = str(question["QuestionNumber"])
-                            if "MainCategoryName" == paragraph.text:
-                                paragraph.runs[0].text = question["MainCategoryName"]
-                            if "QuestionText" == paragraph.text and j == 0:
-                                paragraph.runs[0].text = question["QuestionText"]
-                            # ... (similarly for other placeholders)
-                            if "OptionA" == paragraph.text and j == 2:
-                                paragraph.runs[0].text = question["OptionA"]
-                            if "OptionB" == paragraph.text and j == 2:
-                                paragraph.runs[0].text = question["OptionB"]
-                            if "OptionC" == paragraph.text and j == 2:
-                                paragraph.runs[0].text = question["OptionC"]
-                            if "OptionD" == paragraph.text and j == 2:
-                                paragraph.runs[0].text = question["OptionD"]
-                            if "CorrectAnswer" == paragraph.text and j == 3:
-                                paragraph.runs[0].text = question["CorrectAnswer"]
-                            if "Explanation" == paragraph.text and j == 3:
-                                paragraph.runs[0].text = question["Explanation"]
-                
-                source_xml = source_slide._element
-                new_xml = new_slide._element
-                source_transition = source_xml.find('.//{http://schemas.openxmlformats.org/presentationml/2006/main}transition')
-                if source_transition is not None:
-                    # Remove existing transition in the new slide
-                    existing_transition = new_xml.find('.//{http://schemas.openxmlformats.org/presentationml/2006/main}transition')
-                    if existing_transition is not None:
-                        new_xml.remove(existing_transition)
-                    # Copy the transition from the source slide
-                    new_xml.append(copy.deepcopy(source_transition))
+                # --- 3.2. Copy Shapes and Replace Placeholders---
+                copy_shapes(source_slide, new_slide)
+                copy_background(source_slide, new_slide)
 
-        # Remove the original template slides
-        for i in range(4):
-            rId = prs.slides._sldIdLst[0].rId
-            prs.part.drop_rel(rId)
-            del prs.slides._sldIdLst[0]
+                # Placeholder mapping for Q\&A slides
+                question_placeholder_mapping = {
+                    "QuestionNumber": str(question["QuestionNumber"]),
+                    "MainCategoryName": question["MainCategoryName"],
+                    "QuestionText": question["QuestionText"] if j == 0 else "",
+                    "OptionA": question["OptionA"] if j == 2 else "",
+                    "OptionB": question["OptionB"] if j == 2 else "",
+                    "OptionC": question["OptionC"] if j == 2 else "",
+                    "OptionD": question["OptionD"] if j == 2 else "",
+                    "CorrectAnswer": question["CorrectAnswer"] if j == 3 else "",
+                    "Explanation": question["Explanation"] if j == 3 else "",
+                }
+
+                replace_placeholders_in_slide([new_slide], question_placeholder_mapping)
+
+                # --- 3.3 Copy Slide Transitions ---
+                copy_transitions(source_slide, new_slide)
 
         prs.save(output_path)
 
     except Exception as e:
         print(f"Error in generate_powerpoint: {e}")
         raise
+
+def replace_placeholders_in_slide(slides, placeholder_mapping):
+    """Replaces placeholders in a slide with values from a dictionary."""
+    for slide in slides:
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                for paragraph in shape.text_frame.paragraphs:
+                    for placeholder, value in placeholder_mapping.items():
+                        if placeholder == paragraph.text:
+                            for run in paragraph.runs:
+                                run.text = str(value)
+
+def get_or_create_slide_layout(prs, source_slide, q_and_a_layouts, q_and_a_masters):
+    """Gets an existing slide layout or creates a new one if it doesn't exist."""
+    layout_name = source_slide.slide_layout.name
+    if layout_name in q_and_a_layouts:
+        # Check if this layout already exists in the main presentation
+        existing_layout = None
+        for existing_slide_layout in prs.slide_layouts:
+            if existing_slide_layout.name == layout_name:
+                existing_layout = existing_slide_layout
+                break
+
+        if not existing_layout:
+            # If layout doesn't exist, add it from the Q\&A template
+            source_master = source_slide.slide_layout.slide_master
+            master_name = source_master.name
+
+            if master_name not in [m.name for m in prs.slide_masters]:
+                # If the master doesn't exist, copy it
+                new_master = prs.slide_masters.add_master(source_master)
+            else:
+                # Master exists, find it
+                for m in prs.slide_masters:
+                    if m.name == master_name:
+                        new_master = m
+                        break
+
+            # Add the layout to the master
+            new_layout = new_master.slide_layouts.add_layout(q_and_a_layouts[layout_name])
+        else:
+            new_layout = existing_layout  # Use existing layout
+
+        return new_layout
+    else:
+        print(f"Warning: Layout '{layout_name}' not found in Q\&A template.")
+        return prs.slide_layouts[0]  # Fallback
+
+def copy_shapes(source_slide, new_slide):
+    """Copies shapes from the source slide to the new slide."""
+    for shape in source_slide.shapes:
+        try:
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                with open(shape.image.filename, 'rb') as image_file:
+                    new_slide.shapes.add_picture(image_file, shape.left, shape.top, shape.width, shape.height)
+            else:
+                el = shape.element
+                new_el = copy.deepcopy(el)
+                new_slide.shapes._spTree.insert_element_before(new_el, "p:extLst")
+        except Exception as e:
+            print(f"Error copying shape: {e}")
+
+def copy_background(source_slide, new_slide):
+    """Copies the background from the source slide to the new slide."""
+    try:
+        new_slide.background.fill.solid()
+        new_slide.background.fill.fore_color.rgb = source_slide.background.fill.fore_color.rgb
+    except Exception as e:
+        print(f"Error copying background: {e}")
+
+def copy_transitions(source_slide, new_slide):
+    """Copies transitions from the source slide to the new slide."""
+    source_xml = source_slide._element
+    new_xml = new_slide._element
+    source_transition = source_xml.find(
+        ".//{http://schemas.openxmlformats.org/presentationml/2006/main}transition"
+    )
+    if source_transition is not None:
+        existing_transition = new_xml.find(
+            ".//{http://schemas.openxmlformats.org/presentationml/2006/main}transition"
+        )
+        if existing_transition is not None:
+            new_xml.remove(existing_transition)
+        new_xml.append(copy.deepcopy(source_transition))
+
 
 async def convert_pptx_to_mp4(
     pptx_path, mp4_path, fps=0.5, dpi=300, image_format="png"
