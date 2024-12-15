@@ -56,14 +56,14 @@ def get_random_motivational_message(gender: str, called_from):
     else:
         return None
 
-
 async def send_motivational_message(
     update: Update, context: CallbackContext, called_from
 ):
     """Sends a motivational message to the user and resets the click counter."""
     # Determine if the update is a regular Update or CallbackQuery
-    if hasattr(update, "callback_query"):  # Update containing a CallbackQuery
-        callback_query = update.callback_query
+    callback_query = getattr(update, 'callback_query', None)
+    user = None
+    if callback_query:
         user = callback_query.from_user
     elif isinstance(update, CallbackQuery):  # If it's directly a CallbackQuery
         callback_query = update
@@ -71,24 +71,23 @@ async def send_motivational_message(
     else:  # Fallback for message-based Update
         user = update.effective_user
 
-    user_id = user.id
-    gender = get_data("SELECT gender FROM users WHERE telegram_id = ?", (user_id,))[0][
-        0
-    ]
+    if user:  # Ensure that user is not None
+        user_id = user.id
+        gender = get_data("SELECT gender FROM users WHERE telegram_id = ?", (user_id,))[0][0]
 
-    message = get_random_motivational_message(gender, called_from)
-    if message:
-        # username = user.username
-        username = await user_management.get_user_name(user_id)
-        message = message.replace("(اسم المستخدم)", username)
+        message = get_random_motivational_message(gender, called_from)
+        if message:
+            # username = user.username
+            username = await user_management.get_user_name(user_id)
+            message = message.replace("(اسم المستخدم)", username)
 
-        if hasattr(update, "message") and update.message:  # Regular message update
-            await update.message.reply_text(message)
-        elif callback_query and callback_query.message:  # Handle CallbackQuery's message
-            await callback_query.message.reply_text(message)
-            await callback_query.answer()  # Acknowledge the button press
+            if hasattr(update, "message") and update.message:  # Regular message update
+                await update.message.reply_text(message)
+            elif callback_query and callback_query.message:  # Handle CallbackQuery's message
+                await callback_query.message.reply_text(message)
+                await callback_query.answer()  # Acknowledge the button press
 
-    context.user_data["button_clicks"] = 0
+        context.user_data["button_clicks"] = 0
 
 
 async def track_button_clicks(update: Update, context: CallbackContext, called_from):
