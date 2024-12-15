@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import copy
 import logging
 import platform
@@ -15,9 +16,6 @@ import time
 from docxcompose.composer import Composer
 from docx.enum.section import WD_SECTION
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-
-if platform.system() == "Windows":
-    import win32com.client
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +241,40 @@ def copy_transitions(source_slide, new_slide):
         new_xml.append(copy.deepcopy(source_transition))
 
 
+def _convert_with_windows(pptx_path, mp4_path):
+    """
+    Blocking conversion for Windows using COM automation.
+    This function runs in a separate thread.
+    """
+    import win32com.client
+    import pythoncom
+
+    pythoncom.CoInitialize()  # Initialize COM for the current thread
+    try:
+        ppt = win32com.client.Dispatch("PowerPoint.Application")
+        pptx_path = os.path.abspath(pptx_path)
+        mp4_path = os.path.abspath(mp4_path)
+
+        presentation = ppt.Presentations.Open(pptx_path, WithWindow=False)
+        presentation.CreateVideo(mp4_path, -1, 4, 1080, 24, 60)
+        start_time_stamp = time.time()
+
+        while True:
+            time.sleep(4)  # Blocking in the thread
+            try:
+                os.rename(mp4_path, mp4_path)
+                print("Success")
+                break
+            except Exception as e:
+                print(f"Waiting for video creation: {e}")
+
+        end_time_stamp = time.time()
+        print(f"Time taken: {end_time_stamp - start_time_stamp}")
+        presentation.Close()
+        ppt.Quit()
+    finally:
+        pythoncom.CoUninitialize()  # Clean up COM initialization
+
 async def convert_pptx_to_mp4(
     pptx_path, mp4_path, fps=0.5, dpi=300, image_format="png"
 ):
@@ -258,78 +290,88 @@ async def convert_pptx_to_mp4(
     - dpi: DPI setting for converting PDF to images
     - image_format: Format to save images (default is PNG)
     """
-    # Step 1: Convert PPTX to PDF using LibreOffice
-    with tempfile.TemporaryDirectory() as temp_dir:
-        pdf_filename = os.path.splitext(os.path.basename(pptx_path))[0] + ".pdf"
-        pdf_path = os.path.join(temp_dir, pdf_filename)
+    if platform.system() == "Windows":
+        loop = asyncio.get_event_loop()
+        try:
+            with ThreadPoolExecutor() as executor:
+                # Use a thread pool for blocking calls
+                await loop.run_in_executor(executor, _convert_with_windows, pptx_path, mp4_path)
+        except Exception as e:
+            print(f"Error in convert_pptx_to_mp4_with_windows: {e}")
 
-        if platform.system() == "Windows":
-            soffice_path = r"C:\Program Files\LibreOffice\program\soffice"
-        else:
-            soffice_path = "libreoffice"
-        # Run the LibreOffice command to convert PPTX to PDF
-        result = subprocess.run(
-            [
-                soffice_path,
-                "--headless",
-                "--invisible",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                temp_dir,
-                pptx_path,
-            ],
-            check=True,
-        )
+    else:
+        # Step 1: Convert PPTX to PDF using LibreOffice
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_filename = os.path.splitext(os.path.basename(pptx_path))[0] + ".pdf"
+            pdf_path = os.path.join(temp_dir, pdf_filename)
 
-        # Check if the PDF was created successfully
-        if not os.path.exists(pdf_path):
-            raise FileNotFoundError("PDF conversion failed.")
-        print(f"Converted PPTX to PDF: {pdf_path}")
-
-        # Step 2: Convert PDF to images
-        if platform.system() == "Windows":
-            # Step 2: Convert PDF to images asynchronously
-            images = await asyncio.to_thread(
-                convert_from_path,
-                pdf_path,
-                dpi=dpi,
-                fmt=image_format,
-                poppler_path=r"C:\poppler-24.08.0\Library\bin",
-            )
-        else:
-            images = await asyncio.to_thread(
-                convert_from_path, pdf_path, dpi=dpi, fmt=image_format
+            if platform.system() == "Windows":
+                soffice_path = r"C:\Program Files\LibreOffice\program\soffice"
+            else:
+                soffice_path = "libreoffice"
+            # Run the LibreOffice command to convert PPTX to PDF
+            result = subprocess.run(
+                [
+                    soffice_path,
+                    "--headless",
+                    "--invisible",
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    temp_dir,
+                    pptx_path,
+                ],
+                check=True,
             )
 
-        # Step 3: Save images to temporary files
-        image_paths = []
-        for i, img in enumerate(images):
-            img_path = os.path.join(
-                temp_dir, f"page_{str(i + 1).zfill(3)}.{image_format}"
-            )
-            img.save(img_path, image_format.upper())
-            image_paths.append(img_path)
+            # Check if the PDF was created successfully
+            if not os.path.exists(pdf_path):
+                raise FileNotFoundError("PDF conversion failed.")
+            print(f"Converted PPTX to PDF: {pdf_path}")
 
-        print(f"PDF converted to images: {len(image_paths)} images generated.")
+            # Step 2: Convert PDF to images
+            if platform.system() == "Windows":
+                # Step 2: Convert PDF to images asynchronously
+                images = await asyncio.to_thread(
+                    convert_from_path,
+                    pdf_path,
+                    dpi=dpi,
+                    fmt=image_format,
+                    poppler_path=r"C:\poppler-24.08.0\Library\bin",
+                )
+            else:
+                images = await asyncio.to_thread(
+                    convert_from_path, pdf_path, dpi=dpi, fmt=image_format
+                )
 
-        # Step 4: Create video from images
-        # Load first image to get frame dimensions
-        frame = cv2.imread(image_paths[0])
-        height, width, layers = frame.shape
+            # Step 3: Save images to temporary files
+            image_paths = []
+            for i, img in enumerate(images):
+                img_path = os.path.join(
+                    temp_dir, f"page_{str(i + 1).zfill(3)}.{image_format}"
+                )
+                img.save(img_path, image_format.upper())
+                image_paths.append(img_path)
 
-        # Define the video codec and create VideoWriter object
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Codec for mp4
-        video = cv2.VideoWriter(mp4_path, fourcc, fps, (width, height))
+            print(f"PDF converted to images: {len(image_paths)} images generated.")
 
-        # Add each image to the video
-        for img_path in image_paths:
-            frame = cv2.imread(img_path)
-            video.write(frame)  # Write each image as a frame
+            # Step 4: Create video from images
+            # Load first image to get frame dimensions
+            frame = cv2.imread(image_paths[0])
+            height, width, layers = frame.shape
 
-        # Release the video writer
-        video.release()
-        print(f"Video saved as {mp4_path}")
+            # Define the video codec and create VideoWriter object
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Codec for mp4
+            video = cv2.VideoWriter(mp4_path, fourcc, fps, (width, height))
+
+            # Add each image to the video
+            for img_path in image_paths:
+                frame = cv2.imread(img_path)
+                video.write(frame)  # Write each image as a frame
+
+            # Release the video writer
+            video.release()
+            print(f"Video saved as {mp4_path}")
 
     # Temporary files (PDF and images) are automatically deleted with temp_dir
 
@@ -339,6 +381,8 @@ def convert_pptx_to_mp4_with_windows(
 ):
     try:
         ppt = win32com.client.Dispatch("PowerPoint.Application")
+        pptx_path = os.path.abspath(pptx_path)
+        mp4_path = os.path.abspath(mp4_path)
         presentation = ppt.Presentations.Open(pptx_path, WithWindow=False)
         presentation.CreateVideo(mp4_path, -1, 4, 1080, 24, 60)
         start_time_stamp = time.time()
