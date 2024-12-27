@@ -625,11 +625,11 @@ async def handle_output_format_choice(update: Update, context: CallbackContext):
         )[0][0]
 
     # Collect user data for the Main page
-    number = generate_number()
-    expression_number = find_expression(number)
+    phone_number = await get_user_phone_number(user_id)
+    expression_number = find_expression(str(phone_number))
     user_data = {
         "studentName": await get_user_name(user_id),
-        "phoneNumber": await get_user_phone_number(user_id),
+        "phoneNumber": phone_number,
         "expressionNumber": expression_number,
         "modelNumber": test_number,
         "date": end_time.strftime("%Y-%m-%d %H:%M:%S"),
