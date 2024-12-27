@@ -3,6 +3,9 @@ import argparse
 import asyncio
 import sys
 from typing import Callable, Dict, Optional
+import os
+from config import DATABASE_FILE
+from utils.database import get_data
 
 class CommandManager:
     def __init__(self):
@@ -48,9 +51,29 @@ class CommandManager:
             sys.exit(1)
 
 
+def initbot(args):
+    from config import DATABASE_FILE
+
+    remove_db = args.rmdb if hasattr(args, "rmdb") else False
+
+    if os.path.exists(DATABASE_FILE) and remove_db:
+        os.remove(DATABASE_FILE)
+    create_db(args)
+    generate_verbal_questions(args)
+    create_context_files_command(args)
+
+def initbot_commands(parser):
+    parser.add_argument(
+        "--rmdb", type=bool, default=False, help="Remove database"
+    )
+
 # Example command handlers
 def runbot(args):
     from main import main as bot
+
+    if not os.path.exists(DATABASE_FILE):
+        initbot(args)
+
     bot()
 
 def finetune(args):
@@ -77,12 +100,14 @@ def generate_verbal_questions(args):
 
 def create_context_files_command(args):
     """Creates context files from Excel data."""
-    from utils.question_management import create_context_files
     from config import ARABIC_PARAGHRAPHS_MK_EXCEL_FILE, CONTEXT_DIRECTORY
-
-    excel_file = ARABIC_PARAGHRAPHS_MK_EXCEL_FILE  # Access the excel_file argument
     output_dir = CONTEXT_DIRECTORY # Access the output_dir argument
-    create_context_files(excel_file, output_dir)
+    print(os.path.exists(output_dir))
+    if not os.path.exists(output_dir):
+        from utils.question_management import create_context_files
+
+        excel_file = ARABIC_PARAGHRAPHS_MK_EXCEL_FILE  # Access the excel_file argument
+        create_context_files(excel_file, output_dir)
 
 def generate_questions_from_chatgpt(args):
     from generating_verable_questions.get_questions_from_excel_as_json import generate_similar_questions_excel
@@ -166,20 +191,11 @@ def setup_generate_questions_from_chatgpt_args(parser):
     parser.add_argument("--batch_size", type=int, default=10, help="Number of rows to process concurrently")
 
 
-def initbot(args):
-    import os
-    from config import DATABASE_FILE
-
-    os.remove(DATABASE_FILE)
-    create_db(args)
-    generate_verbal_questions(args)
-    create_context_files_command(args)
-
 def main():
     manager = CommandManager()
 
     # Register commands with their handlers
-    manager.register_command("runbot", runbot, "Start running the bot")
+    manager.register_command("runbot", runbot, "Start running the bot", initbot_commands)
 
     manager.register_command("initbot", initbot, "Initializing the bot")
 
