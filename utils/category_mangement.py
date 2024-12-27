@@ -32,10 +32,15 @@ def populate_categories_data():
             )
 
 
-def get_subcategory_name(subcategory_id):
+async def get_subcategory_name(subcategory_id):
     """Fetches the name of a subcategory by its ID."""
     subcategory_name = database.get_data("SELECT name FROM subcategories WHERE id = ?", (subcategory_id,))
-    return subcategory_name[0][0]
+    return subcategory_name[0][0] if subcategory_name else None
+
+async def get_main_category_name(main_category_id):
+    """Fetches the name of a main_category by its ID."""
+    main_category_name = database.get_data("SELECT name FROM main_categories WHERE id = ?", (main_category_id,))
+    return main_category_name[0][0] if main_category_name else None
 
 def get_main_categories(page=1, per_page=10):
     """Fetches a paginated list of main categories with IDs."""

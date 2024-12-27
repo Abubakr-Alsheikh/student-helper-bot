@@ -92,6 +92,11 @@ async def convert_docx_to_pdf(word_file, pdf_file=None):
     else:
         raise FileNotFoundError("PDF conversion failed.")
 
+async def generate_main_powerpoint(main_template_path, output_path, user_data):
+    prs = Presentation(main_template_path)
+    replace_placeholders_in_slide(prs.slides, user_data)
+    prs.save(output_path)
+
 async def generate_powerpoint(main_template_path, q_and_a_template_path, output_path, quiz_data, user_data):
     """
     Generates a PowerPoint presentation, merges slides from two templates,
@@ -102,17 +107,7 @@ async def generate_powerpoint(main_template_path, q_and_a_template_path, output_
         q_and_a_prs = Presentation(q_and_a_template_path)
 
         # --- 1. Replace Placeholders in Main Template ---
-        placeholder_mapping = {
-            "studentName": user_data.get("studentName"),
-            "phoneNumber": user_data.get("phoneNumber"),
-            "expressionNumber": user_data.get("expressionNumber"),
-            "modelNumber": user_data.get("modelNumber"),
-            "date": user_data.get("date"),
-            "questionsNumber": user_data.get("questionsNumber"),
-            "studentsResults": user_data.get("studentsResults"),
-        }
-
-        replace_placeholders_in_slide(prs.slides, placeholder_mapping)
+        replace_placeholders_in_slide(prs.slides, user_data)
 
         # --- 2. Prepare Slide Layouts and Masters from Q&A Template ---
         q_and_a_layouts = {layout.name: layout for layout in q_and_a_prs.slide_layouts}
@@ -372,38 +367,6 @@ async def convert_pptx_to_mp4(
             # Release the video writer
             video.release()
             print(f"Video saved as {mp4_path}")
-
-    # Temporary files (PDF and images) are automatically deleted with temp_dir
-
-
-def convert_pptx_to_mp4_with_windows(
-    pptx_path, mp4_path, fps=0.5, dpi=300, image_format="png"
-):
-    try:
-        ppt = win32com.client.Dispatch("PowerPoint.Application")
-        pptx_path = os.path.abspath(pptx_path)
-        mp4_path = os.path.abspath(mp4_path)
-        presentation = ppt.Presentations.Open(pptx_path, WithWindow=False)
-        presentation.CreateVideo(mp4_path, -1, 4, 1080, 24, 60)
-        start_time_stamp = time.time()
-
-        while True:
-            time.sleep(4)
-            try:
-                os.rename(mp4_path, mp4_path)
-                print("Success")
-                break
-            except Exception as e:
-                print(f"Waiting for video creation: {e}")
-
-        end_time_stamp = time.time()
-        print(end_time_stamp - start_time_stamp)
-        presentation.Close()
-        ppt.Quit()
-
-    except Exception as e:
-        print(f"Error in convert_pptx_to_mp4_with_windows: {e}")
-
 
 async def convert_ppt_to_image(ppt_file_path, img_path, dpi=300, image_format="png"):
     """

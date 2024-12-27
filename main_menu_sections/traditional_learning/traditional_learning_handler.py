@@ -471,26 +471,27 @@ async def handle_send_material(update: Update, context: CallbackContext):
     await query.answer()
     _, format = callback_data.split(":", 1)
 
-    material_data = context.user_data.get("material_data")
+    material_data = context.user_data.get("material_data", {
+        "main_category_id": 1,
+        "subcategory_id": 1,
+        "question_id": 1,
+    })
     main_category_id = material_data["main_category_id"]
     subcategory_id = material_data["subcategory_id"]
     question_id = material_data["question_id"]
+    user_id = update.effective_user.id
 
     await query.message.reply_text("جاري التحضير... ⏳")
 
-    # Here's where you'd implement your file generation logic
-    # based on question_id, main_category_id, subcategory_id, and format
-    # For now, let's just send a placeholder message
-
     if format == "pdf":
-        file_path = generate_material_pdf(main_category_id, subcategory_id, question_id)
+        file_path = await generate_material_pdf(main_category_id, subcategory_id, question_id, user_id)
         if file_path:
             with open(file_path, "rb") as f:
                 await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
         else:
             await update.callback_query.message.reply_text("حدث خطأ أثناء إنشاء ملف PDF. ⚠️")
     elif format == "video":
-        file_path = generate_material_video(main_category_id, subcategory_id, question_id)
+        file_path = await generate_material_video(main_category_id, subcategory_id, question_id, user_id)
         if file_path:
             with open(file_path, "rb") as f:
                 await context.bot.send_video(chat_id=update.effective_chat.id, video=f)

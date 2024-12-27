@@ -115,11 +115,13 @@ TEMPLATE_FILES_DIRECTORY = os.path.join(MAIN_FILES, "Template Files")
 # Word Files
 WORD_FOLDER_PATH = os.path.join(TEMPLATE_FILES_DIRECTORY, "Word")
 WORD_MAIN_PATH = os.path.join(WORD_FOLDER_PATH, "Main.docx")
+WORD_MAIN_PATH_MATERIAL = os.path.join(WORD_FOLDER_PATH, "Main Material.docx")
 Q_AND_A_FILE_PATH = os.path.join(WORD_FOLDER_PATH, "Q&A.docx")
 
 # Power Point Files
 POWERPOINT_FOLDER_PATH = os.path.join(TEMPLATE_FILES_DIRECTORY, "Powerpoint")
 POWERPOINT_MAIN_PATH = os.path.join(POWERPOINT_FOLDER_PATH, "Main.pptx")
+POWERPOINT_MAIN_PATH_MATERIAL = os.path.join(POWERPOINT_FOLDER_PATH, "Main Material.pptx")
 Q_AND_A_FILE_PATH_POWERPOINT = os.path.join(POWERPOINT_FOLDER_PATH, "Q&A.pptx")
 
 # ----------------
